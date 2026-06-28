@@ -1,0 +1,113 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum MemberRole {
+  ADMIN
+  MEMBER
+}
+
+model User {
+  id           String            @id @default(uuid())
+  email        String            @unique
+  password     String
+  username     String            @unique
+  bio          String?
+  gitHubHandle String?
+  techTags     String[]
+  createdAt    DateTime          @default(now())
+
+  // Relations
+  memberships    CommunityMember[]
+  sentMessages   Message[]         @relation("SentMessages")
+  receivedMsgs   Message[]         @relation("ReceivedMessages")
+  createdEvents  Event[]           @relation("CreatedEvents")
+  rsvps          EventRSVP[]
+}
+
+model Community {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  ownerId     String
+  createdAt   DateTime @default(now())
+
+  // Relations
+  members  CommunityMember[]
+  channels Channel[]
+  events   Event[]
+}
+
+model CommunityMember {
+  id          String     @id @default(uuid())
+  userId      String
+  communityId String
+  role        MemberRole @default(MEMBER)
+
+  // Relations
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  community Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, communityId])
+}
+
+model Channel {
+  id          String   @id @default(uuid())
+  name        String
+  communityId String
+  createdAt   DateTime @default(now())
+
+  // Relations
+  community Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  messages  Message[]
+}
+
+model Message {
+  id          String   @id @default(uuid())
+  text        String
+  senderId    String
+  channelId   String?
+  recipientId String?
+  groupId     String?
+  isCodeBlock Boolean  @default(false)
+  language    String   @default("plaintext")
+  createdAt   DateTime @default(now())
+
+  // Relations
+  sender    User     @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  recipient User?    @relation("ReceivedMessages", fields: [recipientId], references: [id], onDelete: Cascade)
+  channel   Channel? @relation(fields: [channelId], references: [id], onDelete: Cascade)
+}
+
+model Event {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  date        DateTime
+  meetLink    String?
+  communityId String?
+  creatorId   String
+  createdAt   DateTime @default(now())
+
+  // Relations
+  community Community?  @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  creator   User        @relation("CreatedEvents", fields: [creatorId], references: [id], onDelete: Cascade)
+  rsvps     EventRSVP[]
+}
+
+model EventRSVP {
+  id      String @id @default(uuid())
+  userId  String
+  eventId String
+
+  // Relations
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, eventId])
+}
