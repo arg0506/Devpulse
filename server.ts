@@ -8,6 +8,7 @@ import { db } from './backend/db';
 import authRouter from './backend/routes/auth';
 import communitiesRouter from './backend/routes/communities';
 import eventsRouter from './backend/routes/events';
+import paymentsRouter from './backend/routes/payments';
 import { checkPrismaConnection } from './backend/prismaClient';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -27,6 +28,7 @@ async function startServer() {
   app.use('/api/auth', authRouter);
   app.use('/api/communities', communitiesRouter);
   app.use('/api/events', eventsRouter);
+  app.use('/api/payments', paymentsRouter);
 
   app.get('/api/health', (req, res) => {
     res.json({ status: 'healthy', timestamp: new Date().toISOString() });

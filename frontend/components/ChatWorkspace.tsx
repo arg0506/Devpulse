@@ -24,7 +24,8 @@ import {
   Edit3,
   Calendar,
   ExternalLink,
-  UserCheck
+  UserCheck,
+  Sparkles
 } from 'lucide-react';
 import { socket } from '../socket';
 import { DevUser, DevChannel, DevMessage, ThreadReply, ChatPresence, CodeSnippet } from '../types';
@@ -36,6 +37,7 @@ interface ChatWorkspaceProps {
   isWhiteboardOpen: boolean;
   openTerminal: () => void;
   isTerminalOpen: boolean;
+  triggerUpgrade: (plan: 'pro' | 'enterprise') => void;
 }
 
 const LANGUAGES = ['javascript', 'typescript', 'python', 'rust', 'html', 'css', 'sql'];
@@ -53,7 +55,8 @@ export default function ChatWorkspace({
   openWhiteboard, 
   isWhiteboardOpen,
   openTerminal,
-  isTerminalOpen
+  isTerminalOpen,
+  triggerUpgrade
 }: ChatWorkspaceProps) {
   
   // States
@@ -521,16 +524,16 @@ export default function ChatWorkspace({
     const outputs = snippetOutputs[msg.id] || [];
     
     return (
-      <div className="mt-3.5 border border-[#30363d]/80 rounded-xl overflow-hidden bg-[#0d0f12] shadow-2xl relative">
-        <div className="bg-[#161b22] px-4 py-2 border-b border-[#30363d]/70 flex items-center justify-between text-xs text-[#8b949e]">
+      <div className="mt-3.5 border-2 border-[#1e2022] rounded-none overflow-hidden bg-white shadow-none relative">
+        <div className="bg-[#f2efe9] px-4 py-2 border-b-2 border-[#1e2022] flex items-center justify-between text-xs text-[#1e2022]">
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5 select-none">
-              <span className="w-2.5 h-2.5 rounded-full bg-[#ff5f56] block border border-[#e0443e]" />
-              <span className="w-2.5 h-2.5 rounded-full bg-[#ffbd2e] block border border-[#dea123]" />
-              <span className="w-2.5 h-2.5 rounded-full bg-[#27c93f] block border border-[#1aab29]" />
+            <div className="flex items-center gap-1">
+              <span className="w-2.5 h-2.5 bg-[#1e2022] block" />
+              <span className="w-2.5 h-2.5 bg-transparent border border-[#1e2022] block" />
+              <span className="w-2.5 h-2.5 bg-transparent border border-[#1e2022] block" />
             </div>
-            <span className="font-mono flex items-center gap-2 text-[11px] text-[#c9d1d9] ml-1">
-              <FileText size={12} className="text-cyan-400" />
+            <span className="font-mono flex items-center gap-2 text-[11px] text-[#1e2022] ml-1">
+              <FileText size={12} className="text-[#c2593f]" />
               {msg.codeSnippet.title}
             </span>
           </div>
@@ -539,43 +542,43 @@ export default function ChatWorkspace({
             <button
               onClick={() => runCodeSnippet(msg.id, msg.codeSnippet!.title, msg.codeSnippet!.code)}
               disabled={isRunning}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-mono font-bold transition-all ${
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-none text-[10px] font-mono font-bold transition-all ${
                 isRunning
-                  ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
-                  : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 active:scale-95'
+                  ? 'bg-[#ccd1d9] text-[#1e2022] border border-[#1e2022]'
+                  : 'bg-white text-[#1e2022] border border-[#ccd1d9] hover:bg-[#faf8f5] active:scale-95'
               }`}
             >
-              <div className={`w-1.5 h-1.5 rounded-full bg-emerald-400 ${isRunning ? 'animate-ping' : ''}`} />
+              <div className={`w-1.5 h-1.5 rounded-full bg-[#556b2f] ${isRunning ? 'animate-ping' : ''}`} />
               {isRunning ? 'Running...' : 'Run Code'}
             </button>
             
             <button
               onClick={() => copyCode(msg.codeSnippet!.code, msg.id)}
-              className="text-[#8b949e] hover:text-white flex items-center gap-1.5 px-2 py-1 hover:bg-gray-800 rounded-md transition-colors cursor-pointer"
+              className="text-[#1e2022] hover:text-[#c2593f] flex items-center gap-1.5 px-2 py-1 hover:bg-[#faf8f5] border border-[#ccd1d9] rounded-none transition-colors cursor-pointer bg-white"
             >
-              {copiedId === msg.id ? <Check size={11} className="text-green-500" /> : <Copy size={11} />}
+              {copiedId === msg.id ? <Check size={11} className="text-[#556b2f]" /> : <Copy size={11} />}
               <span className="text-[10px]">{copiedId === msg.id ? 'Copied' : 'Copy'}</span>
             </button>
           </div>
         </div>
 
-        <div className="p-4 overflow-x-auto bg-[#07080a] max-h-72 border-b border-[#1f242c] scrollbar-thin">
+        <div className="p-4 overflow-x-auto bg-[#faf8f5] max-h-72 border-b-2 border-[#1e2022] scrollbar-thin text-[#1e2022]">
           {renderSyntaxCode(msg.codeSnippet.code, msg.codeSnippet.language)}
         </div>
 
         {(isRunning || outputs.length > 0) && (
-          <div className="bg-[#040507] border-t border-[#1f242c] p-3 font-mono text-[10px] text-gray-400 select-text animate-in slide-in-from-bottom duration-200">
-            <div className="flex items-center justify-between text-[9px] text-[#8b949e] uppercase font-bold tracking-wider mb-2 border-b border-[#1f242c]/50 pb-1">
+          <div className="bg-[#f2efe9] border-t border-[#ccd1d9] p-3 font-mono text-[10px] text-[#1e2022] select-text animate-in slide-in-from-bottom duration-200">
+            <div className="flex items-center justify-between text-[9px] text-[#5a6065] uppercase font-bold tracking-wider mb-2 border-b border-[#ccd1d9]/50 pb-1">
               <span>Sandbox Console Terminal Output</span>
-              <span className="text-[#3fb950] animate-pulse">● online</span>
+              <span className="text-[#556b2f]">● online</span>
             </div>
             <div className="space-y-1">
               {outputs.map((line, idx) => {
-                let textClass = 'text-gray-300';
-                if (line.startsWith('$')) textClass = 'text-cyan-400 font-bold';
-                else if (line.startsWith('[STDOUT]')) textClass = 'text-emerald-400 font-medium';
-                else if (line.includes('exit_code=0') || line.includes('successfully')) textClass = 'text-green-400 font-bold';
-                else if (line.includes('AST') || line.includes('virtualenv')) textClass = 'text-purple-400';
+                let textClass = 'text-[#5a6065]';
+                if (line.startsWith('$')) textClass = 'text-[#c2593f] font-bold';
+                else if (line.startsWith('[STDOUT]')) textClass = 'text-[#556b2f] font-medium';
+                else if (line.includes('exit_code=0') || line.includes('successfully')) textClass = 'text-[#556b2f] font-bold';
+                else if (line.includes('AST') || line.includes('virtualenv')) textClass = 'text-[#1e2022]';
                 
                 return (
                   <div key={idx} className={`leading-relaxed ${textClass}`}>
@@ -584,8 +587,8 @@ export default function ChatWorkspace({
                 );
               })}
               {isRunning && (
-                <div className="flex items-center gap-1.5 text-amber-400 font-medium">
-                  <span className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-ping" />
+                <div className="flex items-center gap-1.5 text-[#c2593f] font-medium">
+                  <span className="w-1.5 h-1.5 bg-[#c2593f] rounded-full animate-ping" />
                   <span>evaluating bytecode...</span>
                 </div>
               )}
@@ -936,60 +939,60 @@ export default function ChatWorkspace({
     : (currentActiveChanInfo?.description || 'Developer collaboration node.');
 
   return (
-    <div className="flex-1 flex bg-[#07090e] h-full overflow-hidden text-[#e1e4ea] relative font-sans">
+    <div className="flex-1 flex bg-[#08060f] h-full overflow-hidden text-gray-100 relative font-sans">
       
       {/* PANE 1: VERTICAL THIN NAVIGATION SIDEBAR */}
-      <div className="w-16 bg-[#090b11] border-r border-[#1a2333] flex flex-col items-center py-5 justify-between select-none flex-shrink-0 z-10">
-        <div className="flex flex-col gap-5 items-center w-full">
+      <div className="w-16 bg-[#0c091d]/90 border-r border-purple-500/20 flex flex-col items-center py-6 justify-between select-none flex-shrink-0 z-10 backdrop-blur-xl">
+        <div className="flex flex-col gap-6 items-center w-full">
           {/* Active app icon / header */}
-          <div className="p-2.5 bg-gradient-to-br from-cyan-500/15 to-blue-500/5 text-cyan-400 border border-cyan-500/25 rounded-xl shadow-[0_0_15px_rgba(6,182,212,0.15)] animate-pulse" title="DevPulse System">
+          <div className="p-2.5 bg-pink-950/40 text-pink-400 border border-pink-500/40 rounded-xl shadow-[0_0_15px_rgba(236,72,153,0.3)] animate-pulse" title="DevPulse System">
             <Flame size={18} />
           </div>
 
-          <div className="h-[1px] w-8 bg-[#1f293d]" />
+          <div className="h-[1px] w-8 bg-purple-500/20" />
 
           {/* Navigation Items */}
           <button
             onClick={() => setActiveTab('chats')}
-            className={`p-3 rounded-xl transition-all duration-300 cursor-pointer relative group ${
+            className={`p-3 rounded-xl transition-all duration-300 cursor-pointer relative group border ${
               activeTab === 'chats' 
-                ? 'text-cyan-400 bg-cyan-500/10 border border-cyan-500/25 shadow-[0_0_12px_rgba(6,182,212,0.15)] font-bold' 
-                : 'text-gray-500 hover:text-white hover:bg-white/[0.02]'
+                ? 'text-cyan-400 bg-cyan-500/20 border-cyan-500/40 shadow-[0_0_15px_rgba(6,182,212,0.25)] font-bold' 
+                : 'text-purple-300/60 hover:text-white hover:bg-purple-900/15 border-transparent'
             }`}
             title="Chat Discussion Spaces"
           >
             <MessageSquare size={18} />
-            <span className="absolute left-20 scale-0 group-hover:scale-100 transition-all bg-black/95 text-white border border-[#1f293d] text-[10px] px-2.5 py-1 rounded-md shadow-2xl font-mono whitespace-nowrap z-50">
+            <span className="absolute left-20 scale-0 group-hover:scale-100 transition-all bg-[#110d24]/95 text-white border border-purple-500/30 text-[10px] px-2.5 py-1 rounded-lg shadow-xl font-mono whitespace-nowrap z-50 backdrop-blur-md">
               Chats
             </span>
           </button>
 
           <button
             onClick={() => setActiveTab('communities')}
-            className={`p-3 rounded-xl transition-all duration-300 cursor-pointer relative group ${
+            className={`p-3 rounded-xl transition-all duration-300 cursor-pointer relative group border ${
               activeTab === 'communities' 
-                ? 'text-purple-400 bg-purple-500/10 border border-purple-500/25 shadow-[0_0_12px_rgba(168,85,247,0.15)] font-bold' 
-                : 'text-gray-500 hover:text-white hover:bg-white/[0.02]'
+                ? 'text-cyan-400 bg-cyan-500/20 border-cyan-500/40 shadow-[0_0_15px_rgba(6,182,212,0.25)] font-bold' 
+                : 'text-purple-300/60 hover:text-white hover:bg-purple-900/15 border-transparent'
             }`}
             title="Developer Communities"
           >
             <Users size={18} />
-            <span className="absolute left-20 scale-0 group-hover:scale-100 transition-all bg-black/95 text-white border border-[#1f293d] text-[10px] px-2.5 py-1 rounded-md shadow-2xl font-mono whitespace-nowrap z-50">
+            <span className="absolute left-20 scale-0 group-hover:scale-100 transition-all bg-[#110d24]/95 text-white border border-purple-500/30 text-[10px] px-2.5 py-1 rounded-lg shadow-xl font-mono whitespace-nowrap z-50 backdrop-blur-md">
               Communities
             </span>
           </button>
 
           <button
             onClick={() => setActiveTab('events')}
-            className={`p-3 rounded-xl transition-all duration-300 cursor-pointer relative group ${
+            className={`p-3 rounded-xl transition-all duration-300 cursor-pointer relative group border ${
               activeTab === 'events' 
-                ? 'text-amber-400 bg-amber-500/10 border border-amber-500/25 shadow-[0_0_12px_rgba(245,158,11,0.15)] font-bold' 
-                : 'text-gray-500 hover:text-white hover:bg-white/[0.02]'
+                ? 'text-cyan-400 bg-cyan-500/20 border-cyan-500/40 shadow-[0_0_15px_rgba(6,182,212,0.25)] font-bold' 
+                : 'text-purple-300/60 hover:text-white hover:bg-purple-900/15 border-transparent'
             }`}
             title="Schedules & Technical Events"
           >
             <Calendar size={18} />
-            <span className="absolute left-20 scale-0 group-hover:scale-100 transition-all bg-black/95 text-white border border-[#1f293d] text-[10px] px-2.5 py-1 rounded-md shadow-2xl font-mono whitespace-nowrap z-50">
+            <span className="absolute left-20 scale-0 group-hover:scale-100 transition-all bg-[#110d24]/95 text-white border border-purple-500/30 text-[10px] px-2.5 py-1 rounded-lg shadow-xl font-mono whitespace-nowrap z-50 backdrop-blur-md">
               Events
             </span>
           </button>
@@ -997,14 +1000,28 @@ export default function ChatWorkspace({
 
         {/* User Presence indicator at the bottom */}
         <div className="flex flex-col gap-4 items-center">
+          {(!currentUser.tier || currentUser.tier === 'Sovereign') ? (
+            <button 
+              onClick={() => triggerUpgrade('pro')}
+              className="text-cyan-400 hover:text-white p-2 bg-[#161230]/50 hover:bg-cyan-950/40 border border-cyan-500/20 rounded-xl transition-all cursor-pointer hover:scale-105 shadow-[0_0_8px_rgba(6,182,212,0.2)]"
+              title="Upgrade Node Tier"
+            >
+              <Zap size={14} className="animate-pulse text-cyan-400" />
+            </button>
+          ) : (
+            <div className="text-[8px] font-mono font-bold text-cyan-400 bg-cyan-950/40 border border-cyan-500/30 px-1.5 py-0.5 rounded uppercase tracking-wider scale-90 select-none animate-pulse">
+              PRO
+            </div>
+          )}
+
           <div className="relative group cursor-pointer hover:scale-110 transition-transform duration-200" onClick={() => setSelectedUser(currentUser)}>
-            <span className="text-xl">{currentUser.avatarEmoji}</span>
-            <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-400 border-2 border-[#090b11] shadow-[0_0_8px_rgba(52,211,153,0.5)]" />
+            <span className="text-xl p-1 bg-[#1b163a]/80 border border-purple-500/30 rounded-lg block">{currentUser.avatarEmoji}</span>
+            <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-green-500 border-2 border-[#0c091d]" />
           </div>
 
           <button 
             onClick={onLogout}
-            className="text-gray-500 hover:text-red-400 p-2.5 hover:bg-red-950/20 rounded-xl transition-all cursor-pointer"
+            className="text-purple-300/60 hover:text-pink-400 p-2 hover:bg-pink-950/20 rounded-xl transition-all cursor-pointer border border-transparent hover:border-pink-500/30"
             title="Disconnect Uplink"
           >
             <LogOut size={16} />
@@ -1013,15 +1030,15 @@ export default function ChatWorkspace({
       </div>
 
       {/* PANE 2: CONTEXT SIDEBAR */}
-      <div className="w-60 bg-[#0c0e15] border-r border-[#1f293d] flex flex-col select-none flex-shrink-0">
+      <div className="w-60 bg-[#110d24]/85 border-r border-purple-500/20 flex flex-col select-none flex-shrink-0 backdrop-blur-xl">
         {/* Tab Context Header */}
-        <div className="h-16 border-b border-[#1f293d] bg-[#111420]/80 px-4.5 flex items-center justify-between flex-shrink-0">
-          <span className="font-extrabold tracking-wider text-white text-[10px] uppercase font-mono bg-clip-text text-transparent bg-gradient-to-r from-[#58a6ff] to-[#a5b4fc]">
+        <div className="h-16 border-b border-purple-500/20 bg-[#161230]/90 px-4.5 flex items-center justify-between flex-shrink-0">
+          <span className="font-serif font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-white to-purple-200 text-xs">
             {activeTab === 'chats' && 'Discussion Hub'}
             {activeTab === 'communities' && 'Guild Spaces'}
             {activeTab === 'events' && 'Tech Calendars'}
           </span>
-          <span className="text-[9px] bg-cyan-950/40 text-cyan-400 border border-cyan-500/20 px-2.5 py-0.5 rounded-full font-bold font-mono">
+          <span className="text-[9px] bg-purple-950/80 text-purple-300 border border-purple-500/30 px-2 py-0.5 font-bold font-mono rounded-full">
             {activeTab === 'chats' && `${channels.filter(c => c.category !== 'Direct Messages').length} active`}
             {activeTab === 'communities' && `${communities.length} guilds`}
             {activeTab === 'events' && `${events.length} schedule`}
@@ -1034,12 +1051,12 @@ export default function ChatWorkspace({
             <div className="flex flex-col gap-2">
               <div className="flex items-center justify-between px-2 mb-2">
                 <div className="flex items-center gap-2">
-                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                  <span className="font-mono text-[10px] tracking-wider uppercase font-bold text-[#8b9ba8]">Active Dev Node</span>
+                  <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping shadow-[0_0_8px_rgba(6,182,212,0.6)]" />
+                  <span className="font-mono text-[9px] tracking-wider uppercase font-bold text-purple-300/80">Active Dev Node</span>
                 </div>
                 <button 
                   onClick={() => setIsSnippetModalOpen(true)}
-                  className="p-1.5 bg-cyan-500/10 hover:bg-cyan-500/20 rounded-lg text-cyan-400 border border-cyan-500/25 transition-all cursor-pointer hover:scale-105"
+                  className="p-1 bg-purple-950/40 text-cyan-400 border border-purple-500/30 rounded-lg hover:border-cyan-400 hover:text-white transition-all cursor-pointer hover:scale-105"
                   title="Create New Snippet (Cmd+C)"
                 >
                   <Plus size={13} />
@@ -1048,12 +1065,12 @@ export default function ChatWorkspace({
 
               <button 
                 onClick={() => setIsCommandPaletteOpen(true)}
-                className="w-full flex items-center justify-between px-3 py-2 bg-[#05060a]/90 border border-[#1f293d] hover:border-cyan-500/40 rounded-xl text-left text-[11px] text-gray-400 font-mono transition-all group mb-3 shadow-inner"
+                className="w-full flex items-center justify-between px-3 py-2 bg-[#161230]/50 border border-purple-500/30 hover:border-cyan-400 rounded-xl text-left text-[11px] text-purple-300/60 font-mono transition-all group mb-3 cursor-pointer"
               >
                 <span className="group-hover:text-cyan-300 flex items-center gap-2">
                   <span className="text-cyan-400 font-bold">⌘</span> Search node...
                 </span>
-                <span className="text-[8px] bg-[#121622] text-gray-500 border border-[#1f293d] px-1.5 py-0.5 rounded font-mono shadow">⌘K</span>
+                <span className="text-[8px] bg-purple-950 border border-purple-500/30 text-purple-300 px-1.5 py-0.5 font-mono rounded">⌘K</span>
               </button>
 
               <div className="space-y-1.5">
@@ -1137,37 +1154,37 @@ export default function ChatWorkspace({
                           selectChannel(conv.id);
                         }
                       }}
-                      className={`w-full flex flex-col p-3 rounded-xl border text-left transition-all relative cursor-pointer hover:-translate-y-0.5 duration-200 ${
+                      className={`w-full flex flex-col p-3 rounded-xl border text-left transition-all relative cursor-pointer duration-200 ${
                         isCurrentActive
-                          ? 'bg-gradient-to-r from-cyan-500/15 to-blue-500/5 border-cyan-500/35 text-cyan-300 shadow-[0_4px_12px_rgba(6,182,212,0.15)] font-bold'
-                          : 'bg-[#0f121d]/60 hover:bg-[#151928] border-transparent hover:border-[#1f293d] text-[#8b9ba8]'
+                          ? 'bg-gradient-to-r from-purple-600/25 to-indigo-600/25 border-purple-500/60 text-white font-bold shadow-[0_0_15px_rgba(124,58,237,0.15)]'
+                          : 'bg-[#141029]/30 hover:bg-[#1a1535]/50 border-purple-500/10 hover:border-purple-500/30 text-purple-300/70'
                       }`}
                     >
                       <div className="w-full flex items-center justify-between">
-                        <div className="flex items-center gap-2 font-mono text-xs font-bold truncate text-white">
+                        <div className={`flex items-center gap-2 font-mono text-xs font-bold truncate ${isCurrentActive ? 'text-cyan-400' : 'text-purple-300/80'}`}>
                           {conv.type === 'channel' ? (
                             conv.isPython ? (
                               <PythonIcon size={12} />
                             ) : (
-                              <span className="text-cyan-500 font-bold">#</span>
+                              <span className="text-pink-400 font-bold">#</span>
                             )
                           ) : (
-                            <span className="text-xs p-1 bg-[#1c2235] rounded">{conv.avatarEmoji}</span>
+                            <span className="text-xs p-1 bg-[#1a1535] border border-purple-500/20 rounded-md">{conv.avatarEmoji}</span>
                           )}
                           <span className="truncate">{conv.name}</span>
                         </div>
-                        <span className="text-[9px] text-gray-500 font-mono flex-shrink-0">{conv.time}</span>
+                        <span className="text-[9px] text-purple-400/50 font-mono flex-shrink-0">{conv.time}</span>
                       </div>
 
                       <div className="w-full flex items-center justify-between mt-1.5">
-                        <span className="text-[10px] text-gray-400 font-mono truncate max-w-[130px]">
+                        <span className="text-[10px] text-purple-300/40 font-mono truncate max-w-[130px]">
                           {conv.previewText}
                         </span>
                         {conv.unreadCount > 0 && (
-                          <span className={`text-[9px] font-mono font-extrabold px-1.5 py-0.2 rounded-full flex items-center justify-center ${
+                          <span className={`text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-full flex items-center justify-center ${
                             isCurrentActive
-                              ? 'bg-cyan-400 text-black shadow-[0_0_8px_rgba(34,211,238,0.5)]'
-                              : 'bg-emerald-400 text-black font-extrabold'
+                              ? 'bg-pink-500 text-white shadow-[0_0_8px_rgba(236,72,153,0.5)]'
+                              : 'bg-purple-950 text-purple-300 border border-purple-500/30'
                           }`}>
                             {conv.unreadCount}
                           </span>
@@ -1310,34 +1327,34 @@ export default function ChatWorkspace({
       </div>
 
       {/* 2. MAIN CONVERSATION / CHAT PORT */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden bg-[#07090e]">
+      <div className="flex-1 flex flex-col h-full overflow-hidden bg-[#08060f]">
         
         {/* Active Channel Header */}
-        <div className="h-16 border-b border-[#1f293d] bg-[#0d0f17]/95 px-6 flex items-center justify-between z-10 flex-shrink-0 backdrop-blur-md shadow-sm">
+        <div className="h-16 border-b border-purple-500/20 bg-[#110d24]/85 px-6 flex items-center justify-between z-10 flex-shrink-0 backdrop-blur-xl">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               {isEventMode ? (
-                <Calendar size={16} className="text-amber-400 drop-shadow-[0_0_5px_rgba(245,158,11,0.4)]" />
+                <Calendar size={16} className="text-pink-500 drop-shadow-[0_0_8px_rgba(236,72,153,0.5)]" />
               ) : (
-                <Hash size={16} className="text-cyan-400 drop-shadow-[0_0_5px_rgba(6,182,212,0.4)] font-bold" />
+                <Hash size={16} className="text-cyan-400 font-bold drop-shadow-[0_0_8px_rgba(6,182,212,0.5)]" />
               )}
-              <h2 className="font-extrabold text-white text-sm tracking-wide">
+              <h2 className="font-serif font-extrabold text-white text-base tracking-wide">
                 {isEventMode ? headerTitle : `#${headerTitle}`}
               </h2>
             </div>
-            <p className="text-[11px] text-[#8b9ba8] truncate mt-0.5 font-mono">
+            <p className="text-[11px] text-purple-300/60 truncate mt-0.5 font-mono">
               {headerDesc}
             </p>
           </div>
 
-          {/* Quick Header toggles with gorgeous Pill structure */}
+          {/* Quick Header toggles with Editorial grid structure */}
           <div className="flex items-center gap-2.5">
             <button
               onClick={openWhiteboard}
-              className={`flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-xl transition-all border cursor-pointer hover:-translate-y-0.5 duration-200 ${
+              className={`flex items-center gap-1.5 text-xs font-mono font-bold px-4 py-2 rounded-xl transition-all border cursor-pointer duration-200 ${
                 isWhiteboardOpen
-                  ? 'bg-gradient-to-r from-cyan-600/30 to-blue-600/20 text-cyan-300 border-cyan-500/30 shadow-[0_0_10px_rgba(6,182,212,0.15)]'
-                  : 'bg-[#121622] hover:bg-white/[0.02] text-gray-400 hover:text-white border-[#1f293d]'
+                  ? 'bg-pink-500/20 text-pink-400 border-pink-500/40 shadow-[0_0_15px_rgba(236,72,153,0.25)]'
+                  : 'bg-[#161230]/50 hover:bg-purple-900/15 text-purple-300/70 hover:text-white border-purple-500/15'
               }`}
               title="Collaborative Design Board"
             >
@@ -1347,10 +1364,10 @@ export default function ChatWorkspace({
 
             <button
               onClick={openTerminal}
-              className={`flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-xl transition-all border cursor-pointer hover:-translate-y-0.5 duration-200 ${
+              className={`flex items-center gap-1.5 text-xs font-mono font-bold px-4 py-2 rounded-xl transition-all border cursor-pointer duration-200 ${
                 isTerminalOpen
-                  ? 'bg-gradient-to-r from-emerald-600/30 to-teal-600/20 text-emerald-300 border-emerald-500/30 shadow-[0_0_10px_rgba(16,185,129,0.15)]'
-                  : 'bg-[#121622] hover:bg-white/[0.02] text-gray-400 hover:text-white border-[#1f293d]'
+                  ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/40 shadow-[0_0_15px_rgba(6,182,212,0.25)]'
+                  : 'bg-[#161230]/50 hover:bg-purple-900/15 text-purple-300/70 hover:text-white border-purple-500/15'
               }`}
               title="Toggle Sandbox Command Console"
             >
@@ -1455,9 +1472,9 @@ export default function ChatWorkspace({
 
             if (activeMessages.length === 0) {
               return (
-                <div className="py-12 flex flex-col items-center justify-center text-center text-[#8b949e]">
-                  <MessageSquare size={32} className="text-gray-700 mb-3" />
-                  <p className="text-sm font-medium">This conversation is pristine.</p>
+                <div className="py-12 flex flex-col items-center justify-center text-center text-purple-300/60">
+                  <MessageSquare size={32} className="text-purple-400 mb-3 drop-shadow-[0_0_8px_rgba(192,132,252,0.4)] animate-bounce" />
+                  <p className="text-sm font-serif font-extrabold text-white">This conversation is pristine.</p>
                   <p className="text-xs">Transmit a message to initialize discussions!</p>
                 </div>
               );
@@ -1466,7 +1483,7 @@ export default function ChatWorkspace({
             return activeMessages.map((msg) => {
               const isMe = msg.userId === currentUser.id;
               return (
-                <div key={msg.id} className="flex gap-3 group items-start hover:bg-gray-800/10 -mx-6 px-6 py-2 rounded-lg transition-colors">
+                <div key={msg.id} className="flex gap-3 group items-start hover:bg-purple-950/20 -mx-6 px-6 py-2 transition-colors duration-150">
                   
                   {/* Avatar */}
                   <div 
@@ -1482,7 +1499,7 @@ export default function ChatWorkspace({
                         xpPoints: 0
                       });
                     }}
-                    className="text-2xl cursor-pointer hover:scale-110 transition-transform flex-shrink-0"
+                    className="text-2xl cursor-pointer hover:scale-105 transition-transform flex-shrink-0"
                   >
                     {msg.avatarEmoji}
                   </div>
@@ -1490,18 +1507,18 @@ export default function ChatWorkspace({
                   {/* Body Content */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="font-semibold text-white text-xs cursor-pointer hover:underline">
+                      <span className="font-serif font-extrabold text-white text-sm cursor-pointer hover:underline hover:text-cyan-400 transition-colors">
                         @{msg.username}
                       </span>
-                      <span className="text-[9px] bg-blue-900/20 text-blue-400 px-1.5 py-0.2 rounded font-mono">
+                      <span className="text-[9px] bg-purple-950/60 text-purple-300 border border-purple-500/30 px-1.5 py-0.2 rounded-md font-mono font-medium">
                         {msg.role}
                       </span>
-                      <span className="text-[10px] text-gray-500 font-mono">
+                      <span className="text-[10px] text-purple-300/40 font-mono">
                         {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </span>
                     </div>
 
-                    <p className="text-xs text-[#c9d1d9] mt-1 leading-relaxed break-words">
+                    <p className="text-sm text-gray-200 mt-1 leading-relaxed break-words font-sans">
                       {renderMessageText(msg.text)}
                     </p>
 
@@ -1512,7 +1529,7 @@ export default function ChatWorkspace({
                     {msg.codeSnippet && renderInteractiveCodeSnippet(msg)}
 
                     {/* Reactions Toolbar */}
-                    <div className="flex flex-wrap gap-1 mt-2.5">
+                    <div className="flex flex-wrap gap-1.5 mt-2.5">
                       {/* Interactive reactions */}
                       {['🚀', '🔥', '💻', '👍', '🧠'].map((emoji) => {
                         const reactObj = msg.reactions?.find(r => r.emoji === emoji);
@@ -1523,10 +1540,10 @@ export default function ChatWorkspace({
                           <button
                             key={emoji}
                             onClick={() => handleReact(msg.id, emoji)}
-                            className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] border font-mono transition-all cursor-pointer ${
+                            className={`flex items-center gap-1 px-1.5 py-0.5 text-[10px] border font-mono transition-all cursor-pointer rounded-md ${
                               active
-                                ? 'bg-blue-600/10 text-blue-400 border-blue-500/40'
-                                : 'bg-[#161b22] text-gray-500 border-transparent hover:border-gray-700'
+                                ? 'bg-purple-500/25 text-pink-400 border-pink-500/40 font-bold shadow-[0_0_8px_rgba(236,72,153,0.2)]'
+                                : 'bg-[#161230]/40 text-purple-300/60 border border-purple-500/10 hover:border-purple-500/30'
                             }`}
                           >
                             <span>{emoji}</span>
@@ -1538,7 +1555,7 @@ export default function ChatWorkspace({
                       {/* Reply button */}
                       <button
                         onClick={() => openThread(msg)}
-                        className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] bg-[#161b22] text-gray-400 border border-transparent hover:border-gray-700 transition-all cursor-pointer"
+                        className="flex items-center gap-1.5 px-2.5 py-0.5 text-[10px] bg-[#161230]/40 text-purple-300/60 border border-purple-500/10 hover:border-purple-500/30 transition-all cursor-pointer rounded-md"
                       >
                         <MessageSquare size={10} />
                         <span>Replies ({msg.repliesCount || 0})</span>
@@ -1555,8 +1572,8 @@ export default function ChatWorkspace({
 
         {/* Dynamic Typing indicators */}
         {Object.keys(typingUsers).length > 0 && (
-          <div className="px-6 py-2 text-[10px] text-cyan-400 bg-[#05070b]/90 border-t border-[#1f293d]/50 flex items-center gap-1.5 font-mono shadow-inner animate-pulse">
-            <Activity size={10} className="text-cyan-400 animate-spin" />
+          <div className="px-6 py-2 text-[10px] text-pink-400 bg-[#110d24]/90 border-t border-purple-500/20 flex items-center gap-1.5 font-mono shadow-none animate-pulse">
+            <Activity size={10} className="text-pink-400 animate-spin" />
             <span>
               {Object.values(typingUsers).join(', ')} {Object.keys(typingUsers).length === 1 ? 'is' : 'are'} transmitting packets...
             </span>
@@ -1564,13 +1581,13 @@ export default function ChatWorkspace({
         )}
 
         {/* Chat input box */}
-        <form onSubmit={sendMessage} className="p-4.5 border-t border-[#1f293d] bg-[#0c0e15]/95 backdrop-blur-md">
-          <div className="flex items-center bg-[#05060a]/90 border border-[#1f293d] focus-within:border-cyan-500/50 rounded-xl p-2 gap-2.5 transition-all shadow-inner">
+        <form onSubmit={sendMessage} className="p-4.5 border-t border-purple-500/20 bg-[#110d24]/95">
+          <div className="flex items-center bg-[#161230]/50 border border-purple-500/30 focus-within:border-cyan-400 rounded-xl p-1 gap-2.5 transition-all">
             
             <button
               type="button"
               onClick={() => setIsSnippetModalOpen(true)}
-              className="text-cyan-400 hover:text-cyan-300 p-2 bg-cyan-500/10 border border-cyan-500/20 rounded-lg transition-all cursor-pointer"
+              className="text-cyan-400 hover:text-white p-2 bg-[#1b163a]/80 border border-purple-500/20 hover:border-cyan-400 rounded-lg transition-all cursor-pointer"
               title="Post Code Snippet"
             >
               <Code size={15} />
@@ -1581,15 +1598,15 @@ export default function ChatWorkspace({
               value={text}
               onChange={(e) => setText(e.target.value)}
               placeholder={`Transmit code or message to #${currentActiveChanInfo?.name || 'space'}...`}
-              className="flex-1 bg-transparent border-none outline-none focus:ring-0 text-[#e1e4ea] text-xs placeholder-gray-600 tracking-wide font-mono"
+              className="flex-1 bg-transparent border-none outline-none focus:ring-0 text-white text-xs placeholder-purple-300/30 tracking-wide font-mono"
             />
 
             <button
               type="submit"
               disabled={!text.trim()}
-              className="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 disabled:opacity-30 disabled:hover:from-cyan-600 disabled:hover:to-blue-600 text-black font-bold p-2.5 rounded-lg transition-all cursor-pointer flex items-center justify-center shadow-[0_0_15px_rgba(6,182,212,0.3)]"
+              className="bg-cyan-500 hover:bg-cyan-400 disabled:opacity-20 text-black font-extrabold p-2.5 rounded-lg transition-all cursor-pointer flex items-center justify-center shadow-[0_0_12px_rgba(6,182,212,0.3)] disabled:shadow-none"
             >
-              <Send size={13} className="text-white" />
+              <Send size={13} className="text-black" />
             </button>
           </div>
         </form>
@@ -1597,11 +1614,11 @@ export default function ChatWorkspace({
       </div>
 
       {/* 3. RIGHT ACTIVE DEVELOPERS DIRECTORY PANEL */}
-      <div className="w-56 bg-[#0c0e15] border-l border-[#1f293d] flex flex-col select-none">
-        <div className="h-16 border-b border-[#1f293d] bg-[#111420]/80 px-4 flex items-center gap-2.5 flex-shrink-0">
-          <Users size={14} className="text-cyan-400 drop-shadow-[0_0_5px_rgba(6,182,212,0.4)]" />
-          <span className="text-xs font-bold tracking-wide text-white font-mono uppercase">Node Directory</span>
-          <span className="text-[9px] bg-cyan-500/10 text-cyan-400 border border-cyan-500/25 px-2 py-0.5 rounded-full font-bold font-mono ml-auto">
+      <div className="w-56 bg-[#110d24]/85 border-l border-purple-500/20 flex flex-col select-none backdrop-blur-xl">
+        <div className="h-16 border-b border-purple-500/20 bg-[#161230]/90 px-4 flex items-center gap-2.5 flex-shrink-0">
+          <Users size={14} className="text-pink-400 drop-shadow-[0_0_8px_rgba(236,72,153,0.5)]" />
+          <span className="text-xs font-serif font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-white to-purple-200">Node Directory</span>
+          <span className="text-[9px] bg-purple-950/80 text-purple-300 border border-purple-500/30 px-2 py-0.5 font-bold font-mono rounded-full ml-auto">
             {presences.filter(p => p.status === 'online').length}
           </span>
         </div>
@@ -1622,17 +1639,17 @@ export default function ChatWorkspace({
                   xpPoints: 120
                 });
               }}
-              className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl hover:bg-white/[0.02] border border-transparent hover:border-[#1f293d]/50 transition-all cursor-pointer"
+              className="flex items-center gap-2.5 px-3 py-2 border border-transparent hover:border-purple-500/30 hover:bg-[#1a1535]/50 rounded-xl transition-all cursor-pointer"
             >
               <div className="relative">
-                <span className="text-xl p-1 bg-[#151928] rounded-lg border border-[#1f293d]/50 block">{pres.avatarEmoji}</span>
-                <span className={`absolute -bottom-1 -right-1 w-2.5 h-2.5 rounded-full border-2 border-[#0c0e15] ${
-                  pres.status === 'online' ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]' : 'bg-gray-600'
+                <span className="text-xl p-1 bg-[#161230] border border-purple-500/20 rounded-lg block">{pres.avatarEmoji}</span>
+                <span className={`absolute -bottom-1 -right-1 w-2.5 h-2.5 rounded-full border-2 border-[#110d24] ${
+                  pres.status === 'online' ? 'bg-green-500' : 'bg-gray-500'
                 }`} />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-xs font-bold text-white truncate hover:underline">@{pres.username}</p>
-                <p className="text-[9px] text-gray-500 font-mono tracking-wider truncate uppercase">{pres.role}</p>
+                <p className="text-xs font-serif font-extrabold text-white hover:text-cyan-400 truncate">@{pres.username}</p>
+                <p className="text-[9px] text-purple-300/40 font-mono tracking-wider truncate uppercase">{pres.role}</p>
               </div>
             </div>
           ))}
@@ -1719,13 +1736,13 @@ export default function ChatWorkspace({
 
       {/* B. Code Snippet Upload Modal */}
       {isSnippetModalOpen && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg bg-[#161b22] border border-[#30363d] rounded-xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
-            <div className="bg-[#21262d] px-4 py-3 border-b border-[#30363d] flex items-center justify-between">
-              <span className="text-xs font-mono text-[#8b949e]">codebase_snapshot_uploader.py</span>
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-md">
+          <div className="w-full max-w-lg bg-[#0f0b21]/95 border border-purple-500/30 rounded-2xl shadow-[0_0_50px_rgba(124,58,237,0.25)] overflow-hidden animate-in zoom-in-95 duration-200 backdrop-blur-xl">
+            <div className="bg-[#161230]/90 px-4 py-3 border-b border-purple-500/20 flex items-center justify-between">
+              <span className="text-xs font-mono font-bold text-cyan-400 drop-shadow-[0_0_8px_rgba(6,182,212,0.4)]">codebase_snapshot_uploader.py</span>
               <button 
                 onClick={() => setIsSnippetModalOpen(false)}
-                className="text-gray-500 hover:text-white cursor-pointer"
+                className="text-purple-300/60 hover:text-white cursor-pointer transition-colors"
               >
                 <X size={14} />
               </button>
@@ -1733,47 +1750,47 @@ export default function ChatWorkspace({
 
             <form onSubmit={handleSendSnippet} className="p-6 space-y-4">
               <div>
-                <label className="block text-[11px] font-mono text-[#8b949e] mb-1">SNIPPET TITLE / FILENAME</label>
+                <label className="block text-[10px] tracking-wider font-mono font-bold text-purple-300/80 uppercase mb-1">SNIPPET TITLE / FILENAME</label>
                 <input
                   type="text"
                   required
                   placeholder="App.tsx or server.ts or index.css..."
                   value={snippetTitle}
                   onChange={(e) => setSnippetTitle(e.target.value)}
-                  className="w-full bg-[#0d1117] border border-[#30363d] rounded-md px-3 py-2 text-xs text-white focus:outline-none focus:border-[#58a6ff] font-mono"
+                  className="w-full bg-[#1b163a]/60 border border-purple-500/30 focus:border-cyan-400 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-cyan-400/30 font-mono transition-all"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[11px] font-mono text-[#8b949e] mb-1">LANGUAGE</label>
+                  <label className="block text-[10px] tracking-wider font-mono font-bold text-purple-300/80 uppercase mb-1">LANGUAGE</label>
                   <select
                     value={snippetLang}
                     onChange={(e) => setSnippetLang(e.target.value)}
-                    className="w-full bg-[#0d1117] border border-[#30363d] rounded-md px-3 py-2 text-xs text-white focus:outline-none focus:border-[#58a6ff] font-mono"
+                    className="w-full bg-[#1b163a]/60 border border-purple-500/30 focus:border-cyan-400 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-cyan-400/30 font-mono transition-all"
                   >
                     {LANGUAGES.map(lang => (
-                      <option key={lang} value={lang}>{lang.toUpperCase()}</option>
+                      <option key={lang} value={lang} className="bg-[#110d24] text-white">{lang.toUpperCase()}</option>
                     ))}
                   </select>
                 </div>
               </div>
 
               <div>
-                <label className="block text-[11px] font-mono text-[#8b949e] mb-1">RAW CODE</label>
+                <label className="block text-[10px] tracking-wider font-mono font-bold text-purple-300/80 uppercase mb-1">RAW CODE</label>
                 <textarea
                   required
                   rows={8}
                   placeholder={`export default function MyComponent() {\n  return <div>Build details</div>\n}`}
                   value={snippetCode}
                   onChange={(e) => setSnippetCode(e.target.value)}
-                  className="w-full bg-[#0d1117] border border-[#30363d] rounded-md p-3 text-xs text-white focus:outline-none focus:border-[#58a6ff] font-mono whitespace-pre-wrap"
+                  className="w-full bg-[#1b163a]/60 border border-purple-500/30 focus:border-cyan-400 rounded-xl p-3 text-xs text-white focus:outline-none focus:ring-1 focus:ring-cyan-400/30 font-mono whitespace-pre-wrap"
                 />
               </div>
 
               <button
                 type="submit"
-                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs py-2 px-4 rounded-md transition-colors flex items-center justify-center gap-2"
+                className="w-full bg-cyan-500 hover:bg-cyan-400 text-black font-mono font-bold text-xs py-2.5 px-4 rounded-xl transition-all flex items-center justify-center gap-2 shadow-[0_0_12px_rgba(6,182,212,0.3)] hover:shadow-[0_0_18px_rgba(6,182,212,0.5)] cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
               >
                 <Code size={13} />
                 Share Snippet Workspace
@@ -1785,13 +1802,13 @@ export default function ChatWorkspace({
 
       {/* C. Create Channel Modal */}
       {isCreateChannelOpen && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-sm bg-[#161b22] border border-[#30363d] rounded-xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
-            <div className="bg-[#21262d] px-4 py-3 border-b border-[#30363d] flex items-center justify-between">
-              <span className="text-xs font-mono text-[#8b949e]">create_channel_wizard.sh</span>
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-md">
+          <div className="w-full max-w-sm bg-[#0f0b21]/95 border border-purple-500/30 rounded-2xl shadow-[0_0_50px_rgba(124,58,237,0.25)] overflow-hidden animate-in zoom-in-95 duration-200 backdrop-blur-xl">
+            <div className="bg-[#161230]/90 px-4 py-3 border-b border-purple-500/20 flex items-center justify-between">
+              <span className="text-xs font-mono font-bold text-cyan-400 drop-shadow-[0_0_8px_rgba(6,182,212,0.4)]">create_channel_wizard.sh</span>
               <button 
                 onClick={() => setIsCreateChannelOpen(false)}
-                className="text-gray-500 hover:text-white cursor-pointer"
+                className="text-purple-300/60 hover:text-white cursor-pointer transition-colors"
               >
                 <X size={14} />
               </button>
@@ -1799,46 +1816,46 @@ export default function ChatWorkspace({
 
             <form onSubmit={handleCreateChannel} className="p-6 space-y-4">
               <div>
-                <label className="block text-[11px] font-mono text-[#8b949e] mb-1">CHANNEL NAME</label>
+                <label className="block text-[10px] tracking-wider font-mono font-bold text-purple-300/80 uppercase mb-1">CHANNEL NAME</label>
                 <div className="relative">
-                  <span className="absolute left-3 top-2 text-xs text-gray-500 font-mono">#</span>
+                  <span className="absolute left-3 top-2.5 text-xs text-purple-400 font-mono">#</span>
                   <input
                     type="text"
                     required
                     placeholder="react-19-hooks"
                     value={newChannelName}
                     onChange={(e) => setNewChannelName(e.target.value)}
-                    className="w-full bg-[#0d1117] border border-[#30363d] rounded-md pl-6 pr-3 py-2 text-xs text-white focus:outline-none focus:border-[#58a6ff] font-mono"
+                    className="w-full bg-[#1b163a]/60 border border-purple-500/30 focus:border-cyan-400 rounded-xl pl-6 pr-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-cyan-400/30 font-mono transition-all"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-[11px] font-mono text-[#8b949e] mb-1">DESCRIPTION</label>
+                <label className="block text-[10px] tracking-wider font-mono font-bold text-purple-300/80 uppercase mb-1">DESCRIPTION</label>
                 <textarea
                   rows={3}
                   placeholder="What should developers discuss here?"
                   value={newChannelDesc}
                   onChange={(e) => setNewChannelDesc(e.target.value)}
-                  className="w-full bg-[#0d1117] border border-[#30363d] rounded-md p-3 text-xs text-white focus:outline-none focus:border-[#58a6ff]"
+                  className="w-full bg-[#1b163a]/60 border border-purple-500/30 focus:border-cyan-400 rounded-xl p-3 text-xs text-white focus:outline-none focus:ring-1 focus:ring-cyan-400/30 transition-all"
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] font-mono text-[#8b949e] mb-1">CLASSIFICATION</label>
+                <label className="block text-[10px] tracking-wider font-mono font-bold text-purple-300/80 uppercase mb-1">CLASSIFICATION</label>
                 <select
                   value={newChannelCat}
                   onChange={(e) => setNewChannelCat(e.target.value as any)}
-                  className="w-full bg-[#0d1117] border border-[#30363d] rounded-md px-3 py-2 text-xs text-white focus:outline-none focus:border-[#58a6ff] font-mono"
+                  className="w-full bg-[#1b163a]/60 border border-purple-500/30 focus:border-cyan-400 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-cyan-400/30 font-mono transition-all"
                 >
-                  <option value="Channels">Channels</option>
-                  <option value="Guilds">Guilds / Specialist Spaces</option>
+                  <option value="Channels" className="bg-[#110d24]">Channels</option>
+                  <option value="Guilds" className="bg-[#110d24]">Guilds / Specialist Spaces</option>
                 </select>
               </div>
 
               <button
                 type="submit"
-                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs py-2 px-4 rounded-md transition-colors flex items-center justify-center gap-2"
+                className="w-full bg-cyan-500 hover:bg-cyan-400 text-black font-mono font-bold text-xs py-2.5 px-4 rounded-xl transition-all flex items-center justify-center gap-2 shadow-[0_0_12px_rgba(6,182,212,0.3)] hover:shadow-[0_0_18px_rgba(6,182,212,0.5)] cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
               >
                 <Plus size={13} />
                 Create Network Space
@@ -1850,13 +1867,13 @@ export default function ChatWorkspace({
 
       {/* E. Create Community Modal */}
       {isCreateCommunityOpen && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-sm bg-[#161b22] border border-[#30363d] rounded-xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
-            <div className="bg-[#21262d] px-4 py-3 border-b border-[#30363d] flex items-center justify-between">
-              <span className="text-xs font-mono text-purple-400">create_guild_wizard.sh</span>
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-md">
+          <div className="w-full max-w-sm bg-[#0f0b21]/95 border border-purple-500/30 rounded-2xl shadow-[0_0_50px_rgba(124,58,237,0.25)] overflow-hidden animate-in zoom-in-95 duration-200 backdrop-blur-xl">
+            <div className="bg-[#161230]/90 px-4 py-3 border-b border-purple-500/20 flex items-center justify-between">
+              <span className="text-xs font-mono font-bold text-cyan-400 drop-shadow-[0_0_8px_rgba(6,182,212,0.4)]">create_guild_wizard.sh</span>
               <button 
                 onClick={() => setIsCreateCommunityOpen(false)}
-                className="text-gray-500 hover:text-white cursor-pointer"
+                className="text-purple-300/60 hover:text-white cursor-pointer transition-colors"
               >
                 <X size={14} />
               </button>
@@ -1864,31 +1881,31 @@ export default function ChatWorkspace({
 
             <form onSubmit={handleCreateCommunity} className="p-6 space-y-4">
               <div>
-                <label className="block text-[11px] font-mono text-[#8b949e] mb-1">GUILD / SPACE NAME</label>
+                <label className="block text-[10px] tracking-wider font-mono font-bold text-purple-300/80 uppercase mb-1">GUILD / SPACE NAME</label>
                 <input
                   type="text"
                   required
                   placeholder="Rust Core Contributors"
                   value={newCommunityName}
                   onChange={(e) => setNewCommunityName(e.target.value)}
-                  className="w-full bg-[#0d1117] border border-[#30363d] rounded-md px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500 font-mono"
+                  className="w-full bg-[#1b163a]/60 border border-purple-500/30 focus:border-cyan-400 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-cyan-400/30 font-mono transition-all"
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] font-mono text-[#8b949e] mb-1">DESCRIPTION</label>
+                <label className="block text-[10px] tracking-wider font-mono font-bold text-purple-300/80 uppercase mb-1">DESCRIPTION</label>
                 <textarea
                   rows={3}
                   placeholder="Systems-level research, async architectures, and microcode compilation..."
                   value={newCommunityDesc}
                   onChange={(e) => setNewCommunityDesc(e.target.value)}
-                  className="w-full bg-[#0d1117] border border-[#30363d] rounded-md p-3 text-xs text-white focus:outline-none focus:border-purple-500"
+                  className="w-full bg-[#1b163a]/60 border border-purple-500/30 focus:border-cyan-400 rounded-xl p-3 text-xs text-white focus:outline-none focus:ring-1 focus:ring-cyan-400/30 transition-all"
                 />
               </div>
 
               <button
                 type="submit"
-                className="w-full bg-purple-600 hover:bg-purple-500 text-white font-medium text-xs py-2 px-4 rounded-md transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                className="w-full bg-cyan-500 hover:bg-cyan-400 text-black font-mono font-bold text-xs py-2.5 px-4 rounded-xl transition-all flex items-center justify-center gap-2 shadow-[0_0_12px_rgba(6,182,212,0.3)] hover:shadow-[0_0_18px_rgba(6,182,212,0.5)] cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
               >
                 <Plus size={13} />
                 Establish Developer Guild
@@ -1900,13 +1917,13 @@ export default function ChatWorkspace({
 
       {/* F. Create Event Modal */}
       {isCreateEventOpen && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-sm bg-[#161b22] border border-[#30363d] rounded-xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
-            <div className="bg-[#21262d] px-4 py-3 border-b border-[#30363d] flex items-center justify-between">
-              <span className="text-xs font-mono text-amber-400">schedule_event_block.sh</span>
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-md">
+          <div className="w-full max-w-sm bg-[#0f0b21]/95 border border-purple-500/30 rounded-2xl shadow-[0_0_50px_rgba(124,58,237,0.25)] overflow-hidden animate-in zoom-in-95 duration-200 backdrop-blur-xl">
+            <div className="bg-[#161230]/90 px-4 py-3 border-b border-purple-500/20 flex items-center justify-between">
+              <span className="text-xs font-mono font-bold text-cyan-400 drop-shadow-[0_0_8px_rgba(6,182,212,0.4)]">schedule_event_block.sh</span>
               <button 
                 onClick={() => setIsCreateEventOpen(false)}
-                className="text-gray-500 hover:text-white cursor-pointer"
+                className="text-purple-300/60 hover:text-white cursor-pointer transition-colors"
               >
                 <X size={14} />
               </button>
@@ -1914,69 +1931,69 @@ export default function ChatWorkspace({
 
             <form onSubmit={handleCreateEvent} className="p-6 space-y-4">
               <div>
-                <label className="block text-[11px] font-mono text-[#8b949e] mb-1">EVENT TITLE</label>
+                <label className="block text-[10px] tracking-wider font-mono font-bold text-purple-300/80 uppercase mb-1">EVENT TITLE</label>
                 <input
                   type="text"
                   required
                   placeholder="K8s Production Auto-Scaling"
                   value={newEventTitle}
                   onChange={(e) => setNewEventTitle(e.target.value)}
-                  className="w-full bg-[#0d1117] border border-[#30363d] rounded-md px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500 font-mono"
+                  className="w-full bg-[#1b163a]/60 border border-purple-500/30 focus:border-cyan-400 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-cyan-400/30 font-mono transition-all"
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] font-mono text-[#8b949e] mb-1">DESCRIPTION</label>
+                <label className="block text-[10px] tracking-wider font-mono font-bold text-purple-300/80 uppercase mb-1">DESCRIPTION</label>
                 <textarea
                   rows={3}
-                  placeholder="Deep dive on configuring auto-scaling thresholds, handling spikes, and designing resilient replicas..."
+                  placeholder="Deep dive on configuring auto-scaling thresholds..."
                   value={newEventDesc}
                   onChange={(e) => setNewEventDesc(e.target.value)}
-                  className="w-full bg-[#0d1117] border border-[#30363d] rounded-md p-3 text-xs text-white focus:outline-none focus:border-amber-500"
+                  className="w-full bg-[#1b163a]/60 border border-purple-500/30 focus:border-cyan-400 rounded-xl p-3 text-xs text-white focus:outline-none focus:ring-1 focus:ring-cyan-400/30 transition-all"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[11px] font-mono text-[#8b949e] mb-1">DATE & TIME</label>
+                  <label className="block text-[10px] tracking-wider font-mono font-bold text-purple-300/80 uppercase mb-1">DATE & TIME</label>
                   <input
                     type="text"
                     required
                     placeholder="Next Monday, 4:00 PM"
                     value={newEventDate}
                     onChange={(e) => setNewEventDate(e.target.value)}
-                    className="w-full bg-[#0d1117] border border-[#30363d] rounded-md px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500 font-mono"
+                    className="w-full bg-[#1b163a]/60 border border-purple-500/30 focus:border-cyan-400 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-cyan-400/30 font-mono transition-all"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-mono text-[#8b949e] mb-1">SELECT GUILD</label>
+                  <label className="block text-[10px] tracking-wider font-mono font-bold text-purple-300/80 uppercase mb-1">SELECT GUILD</label>
                   <select
                     value={newEventCommunityId}
                     onChange={(e) => setNewEventCommunityId(e.target.value)}
-                    className="w-full bg-[#0d1117] border border-[#30363d] rounded-md px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500 font-mono"
+                    className="w-full bg-[#1b163a]/60 border border-purple-500/30 focus:border-cyan-400 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-cyan-400/30 font-mono transition-all"
                   >
                     {communities.map(comm => (
-                      <option key={comm.id} value={comm.id}>{comm.name}</option>
+                      <option key={comm.id} value={comm.id} className="bg-[#110d24] text-white">{comm.name}</option>
                     ))}
                   </select>
                 </div>
               </div>
 
               <div>
-                <label className="block text-[11px] font-mono text-[#8b949e] mb-1">VIRTUAL MEET LINK</label>
+                <label className="block text-[10px] tracking-wider font-mono font-bold text-purple-300/80 uppercase mb-1">VIRTUAL MEET LINK</label>
                 <input
                   type="url"
                   placeholder="https://meet.google.com/xxx-yyyy-zzz"
                   value={newEventMeetLink}
                   onChange={(e) => setNewEventMeetLink(e.target.value)}
-                  className="w-full bg-[#0d1117] border border-[#30363d] rounded-md px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500 font-mono"
+                  className="w-full bg-[#1b163a]/60 border border-purple-500/30 focus:border-cyan-400 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-cyan-400/30 font-mono transition-all"
                 />
               </div>
 
               <button
                 type="submit"
-                className="w-full bg-amber-500 hover:bg-amber-400 text-gray-950 font-bold text-xs py-2 px-4 rounded-md transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                className="w-full bg-cyan-500 hover:bg-cyan-400 text-black font-mono font-bold text-xs py-2.5 px-4 rounded-xl transition-all flex items-center justify-center gap-2 shadow-[0_0_12px_rgba(6,182,212,0.3)] hover:shadow-[0_0_18px_rgba(6,182,212,0.5)] cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
               >
                 <Plus size={13} />
                 Deploy Schedule block
@@ -1988,52 +2005,76 @@ export default function ChatWorkspace({
 
       {/* D. Selected User Details Overlay / Drawer */}
       {selectedUser && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-xs bg-[#161b22] border border-[#30363d] rounded-xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150 relative">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-md">
+          <div className="w-full max-w-xs bg-[#0f0b21]/95 border border-purple-500/30 rounded-2xl shadow-[0_0_50px_rgba(124,58,237,0.25)] overflow-hidden animate-in zoom-in-95 duration-200 relative backdrop-blur-xl">
             
             {/* Header / close button */}
             <div className="absolute top-3 right-3">
               <button 
                 onClick={() => setSelectedUser(null)}
-                className="text-gray-500 hover:text-white transition-colors cursor-pointer"
+                className="text-purple-300/60 hover:text-white transition-colors cursor-pointer"
               >
                 <X size={14} />
               </button>
             </div>
 
             {/* Profile Content */}
-            <div className="p-6 text-center">
-              <span className="text-5xl block mb-3 animate-bounce">{selectedUser.avatarEmoji}</span>
-              <h3 className="text-lg font-bold text-white mb-0.5">@{selectedUser.username}</h3>
-              <p className="text-xs text-[#8b949e] mb-4">{selectedUser.role}</p>
+            <div className="p-6 text-center bg-[#110d24]/50">
+              <span className="text-5xl block mb-3">{selectedUser.avatarEmoji}</span>
+              <h3 className="text-lg font-serif font-extrabold text-white mb-0.5">@{selectedUser.username}</h3>
+              <p className="text-xs text-purple-400 font-mono font-bold uppercase tracking-wider">{selectedUser.role}</p>
+
+              {selectedUser.tier && selectedUser.tier !== 'Sovereign' ? (
+                <div className="mt-2 inline-flex items-center gap-1 px-2.5 py-0.5 bg-cyan-950/40 border border-cyan-500/30 rounded-full text-[9px] font-mono text-cyan-400 uppercase tracking-widest font-bold">
+                  <Sparkles size={10} className="animate-pulse" />
+                  <span>{selectedUser.tier} Node</span>
+                </div>
+              ) : (
+                <div className="mt-2 inline-flex items-center gap-1 px-2.5 py-0.5 bg-purple-950/40 border border-purple-500/20 rounded-full text-[9px] font-mono text-purple-300/60 uppercase tracking-widest">
+                  <span>Sovereign Node</span>
+                </div>
+              )}
+
+              {selectedUser.id === currentUser.id && (!selectedUser.tier || selectedUser.tier === 'Sovereign') && (
+                <button
+                  onClick={() => {
+                    setSelectedUser(null);
+                    triggerUpgrade('pro');
+                  }}
+                  className="w-full mt-4 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 border border-purple-500/30 text-white font-mono font-bold text-[10px] tracking-wider uppercase py-2.5 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-[0_0_12px_rgba(124,58,237,0.25)]"
+                >
+                  <Zap size={11} className="text-cyan-400 animate-bounce" />
+                  Upgrade Node to Pro
+                </button>
+              )}
 
               {/* Badges streak/xp */}
-              <div className="grid grid-cols-2 gap-2 mb-6">
-                <div className="bg-[#0d1117] border border-[#30363d] rounded p-2 text-center">
-                  <div className="flex items-center justify-center gap-1 text-orange-400 text-xs font-bold">
-                    <Flame size={12} />
+              <div className="grid grid-cols-2 gap-2 mb-6 mt-4">
+                <div className="bg-[#1b163a]/60 border border-purple-500/20 rounded-xl p-2 text-center">
+                  <div className="flex items-center justify-center gap-1 text-pink-400 text-xs font-bold font-mono">
+                    <Flame size={12} className="drop-shadow-[0_0_6px_rgba(236,72,153,0.4)]" />
                     <span>{selectedUser.streakCount || 5} days</span>
                   </div>
-                  <span className="text-[10px] text-gray-500 block mt-0.5 uppercase tracking-wider font-mono">Streak</span>
+                  <span className="text-[10px] text-purple-300/40 block mt-0.5 uppercase tracking-wider font-mono">Streak</span>
                 </div>
 
-                <div className="bg-[#0d1117] border border-[#30363d] rounded p-2 text-center">
-                  <div className="flex items-center justify-center gap-1 text-yellow-400 text-xs font-bold">
-                    <Zap size={12} />
+                <div className="bg-[#1b163a]/60 border border-purple-500/20 rounded-xl p-2 text-center">
+                  <div className="flex items-center justify-center gap-1 text-cyan-400 text-xs font-bold font-mono">
+                    <Zap size={12} className="drop-shadow-[0_0_6px_rgba(6,182,212,0.4)]" />
                     <span>{selectedUser.xpPoints || 145} pts</span>
                   </div>
-                  <span className="text-[10px] text-gray-500 block mt-0.5 uppercase tracking-wider font-mono">XP Rating</span>
+                  <span className="text-[10px] text-purple-300/40 block mt-0.5 uppercase tracking-wider font-mono">XP Rating</span>
                 </div>
               </div>
 
               {/* Listed Skills */}
-              <div className="text-left">
-                <p className="text-[10px] font-mono text-gray-500 uppercase tracking-wider mb-2">Primary Core Stack</p>
+              <div className="text-left border-t border-purple-500/10 pt-4">
+                <p className="text-[10px] font-mono text-purple-300/60 uppercase tracking-wider mb-2">Primary Core Stack</p>
                 <div className="flex flex-wrap gap-1.5">
                   {(selectedUser.skills && selectedUser.skills.length > 0 ? selectedUser.skills : ['TS', 'React', 'Node', 'System Design']).map((skill, idx) => (
                     <span 
                       key={idx}
-                      className="text-[10px] font-mono bg-blue-900/10 text-blue-400 border border-blue-500/10 px-2 py-0.5 rounded"
+                      className="text-[10px] font-mono bg-purple-950/40 text-purple-200 border border-purple-500/20 px-2 py-0.5 rounded"
                     >
                       {skill}
                     </span>
@@ -2048,30 +2089,30 @@ export default function ChatWorkspace({
 
       {/* COMMAND PALETTE OVERLAY */}
       {isCommandPaletteOpen && (
-        <div className="fixed inset-0 bg-[#07080a]/80 backdrop-blur-md flex items-start justify-center pt-[15vh] z-[9999] select-none animate-in fade-in duration-150">
-          <div className="w-full max-w-lg bg-[#161b22] border border-[#30363d] rounded-xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-start justify-center pt-[15vh] z-[9999] select-none animate-in fade-in duration-200">
+          <div className="w-full max-w-lg bg-[#0f0b21]/95 border border-purple-500/30 rounded-2xl shadow-[0_0_50px_rgba(124,58,237,0.3)] overflow-hidden animate-in zoom-in-95 duration-200 backdrop-blur-xl">
             {/* Search Box */}
-            <div className="p-4 border-b border-[#30363d] flex items-center gap-3">
-              <span className="text-cyan-400 font-mono text-sm">⌘</span>
+            <div className="p-4 border-b border-purple-500/20 flex items-center gap-3 bg-[#161230]/90">
+              <span className="text-cyan-400 font-mono text-sm drop-shadow-[0_0_6px_rgba(6,182,212,0.5)]">⌘</span>
               <input
                 type="text"
                 value={commandPaletteSearch}
                 onChange={(e) => setCommandPaletteSearch(e.target.value)}
                 placeholder="Search actions, files, or press ESC to exit..."
-                className="bg-transparent text-white placeholder-gray-500 text-sm focus:outline-none w-full font-mono"
+                className="bg-transparent text-white placeholder-purple-300/30 text-sm focus:outline-none w-full font-mono"
                 autoFocus
               />
               <button 
                 onClick={() => setIsCommandPaletteOpen(false)}
-                className="text-gray-500 hover:text-white"
+                className="text-purple-300/40 hover:text-white transition-colors cursor-pointer"
               >
                 <X size={16} />
               </button>
             </div>
             
             {/* Actions List */}
-            <div className="max-h-80 overflow-y-auto p-2 space-y-1 font-mono text-xs">
-              <div className="px-3 py-1.5 text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+            <div className="max-h-80 overflow-y-auto p-2 space-y-1 font-mono text-xs bg-[#0f0b21]/40 text-purple-200">
+              <div className="px-3 py-1.5 text-[10px] font-bold text-purple-400/50 uppercase tracking-wider">
                 System Controls
               </div>
               
@@ -2080,13 +2121,13 @@ export default function ChatWorkspace({
                   setIsCommandPaletteOpen(false);
                   setIsSnippetModalOpen(true);
                 }}
-                className="w-full text-left px-3 py-2 hover:bg-cyan-500/10 hover:text-cyan-300 rounded-lg flex items-center justify-between group transition-colors"
+                className="w-full text-left px-3 py-2 hover:bg-[#1a1535]/50 rounded-xl flex items-center justify-between group transition-colors cursor-pointer"
               >
-                <span className="flex items-center gap-2">
-                  <Code size={13} className="text-gray-400 group-hover:text-cyan-300" />
+                <span className="flex items-center gap-2 text-purple-300 group-hover:text-cyan-300">
+                  <Code size={13} className="text-purple-400/60 group-hover:text-cyan-300" />
                   Create Code Snippet
                 </span>
-                <span className="text-[10px] bg-[#21262d] text-gray-400 px-1.5 py-0.5 rounded">Cmd + C</span>
+                <span className="text-[10px] bg-purple-950 border border-purple-500/30 text-purple-300 px-1.5 py-0.5 rounded">Cmd + C</span>
               </button>
 
               <button
@@ -2095,13 +2136,13 @@ export default function ChatWorkspace({
                   setIsCreateChannelOpen(true);
                   setNewChannelCat('Channels');
                 }}
-                className="w-full text-left px-3 py-2 hover:bg-cyan-500/10 hover:text-cyan-300 rounded-lg flex items-center justify-between group transition-colors"
+                className="w-full text-left px-3 py-2 hover:bg-[#1a1535]/50 rounded-xl flex items-center justify-between group transition-colors cursor-pointer"
               >
-                <span className="flex items-center gap-2">
-                  <Plus size={13} className="text-gray-400 group-hover:text-cyan-300" />
+                <span className="flex items-center gap-2 text-purple-300 group-hover:text-cyan-300">
+                  <Plus size={13} className="text-purple-400/60 group-hover:text-cyan-300" />
                   Establish New Channel Space
                 </span>
-                <span className="text-[10px] bg-[#21262d] text-gray-400 px-1.5 py-0.5 rounded">Cmd + Shift + N</span>
+                <span className="text-[10px] bg-purple-950 border border-purple-500/30 text-purple-300 px-1.5 py-0.5 rounded">Cmd + Shift + N</span>
               </button>
 
               <button
@@ -2109,13 +2150,13 @@ export default function ChatWorkspace({
                   setIsCommandPaletteOpen(false);
                   setIsCreateCommunityOpen(true);
                 }}
-                className="w-full text-left px-3 py-2 hover:bg-cyan-500/10 hover:text-cyan-300 rounded-lg flex items-center justify-between group transition-colors"
+                className="w-full text-left px-3 py-2 hover:bg-[#1a1535]/50 rounded-xl flex items-center justify-between group transition-colors cursor-pointer"
               >
-                <span className="flex items-center gap-2">
-                  <Users size={13} className="text-gray-400 group-hover:text-cyan-300" />
+                <span className="flex items-center gap-2 text-purple-300 group-hover:text-cyan-300">
+                  <Users size={13} className="text-purple-400/60 group-hover:text-cyan-300" />
                   Establish Developer Guild Space
                 </span>
-                <span className="text-[10px] bg-[#21262d] text-gray-400 px-1.5 py-0.5 rounded">Cmd + G</span>
+                <span className="text-[10px] bg-purple-950 border border-purple-500/30 text-purple-300 px-1.5 py-0.5 rounded">Cmd + G</span>
               </button>
 
               <button
@@ -2123,13 +2164,13 @@ export default function ChatWorkspace({
                   setIsCommandPaletteOpen(false);
                   setIsCreateEventOpen(true);
                 }}
-                className="w-full text-left px-3 py-2 hover:bg-cyan-500/10 hover:text-cyan-300 rounded-lg flex items-center justify-between group transition-colors"
+                className="w-full text-left px-3 py-2 hover:bg-[#1a1535]/50 rounded-xl flex items-center justify-between group transition-colors cursor-pointer"
               >
-                <span className="flex items-center gap-2">
-                  <Calendar size={13} className="text-gray-400 group-hover:text-cyan-300" />
+                <span className="flex items-center gap-2 text-purple-300 group-hover:text-cyan-300">
+                  <Calendar size={13} className="text-purple-400/60 group-hover:text-cyan-300" />
                   Schedule Technical Event
                 </span>
-                <span className="text-[10px] bg-[#21262d] text-gray-400 px-1.5 py-0.5 rounded">Cmd + E</span>
+                <span className="text-[10px] bg-purple-950 border border-purple-500/30 text-purple-300 px-1.5 py-0.5 rounded">Cmd + E</span>
               </button>
 
               <button
@@ -2137,13 +2178,13 @@ export default function ChatWorkspace({
                   setIsCommandPaletteOpen(false);
                   openWhiteboard();
                 }}
-                className="w-full text-left px-3 py-2 hover:bg-cyan-500/10 hover:text-cyan-300 rounded-lg flex items-center justify-between group transition-colors"
+                className="w-full text-left px-3 py-2 hover:bg-[#1a1535]/50 rounded-xl flex items-center justify-between group transition-colors cursor-pointer"
               >
-                <span className="flex items-center gap-2">
-                  <Tv size={13} className="text-gray-400 group-hover:text-cyan-300" />
+                <span className="flex items-center gap-2 text-purple-300 group-hover:text-cyan-300">
+                  <Tv size={13} className="text-purple-400/60 group-hover:text-cyan-300" />
                   Toggle Architecture Whiteboard
                 </span>
-                <span className="text-[10px] bg-[#21262d] text-gray-400 px-1.5 py-0.5 rounded">Cmd + W</span>
+                <span className="text-[10px] bg-purple-950 border border-purple-500/30 text-purple-300 px-1.5 py-0.5 rounded">Cmd + W</span>
               </button>
 
               <button
@@ -2151,18 +2192,18 @@ export default function ChatWorkspace({
                   setIsCommandPaletteOpen(false);
                   openTerminal();
                 }}
-                className="w-full text-left px-3 py-2 hover:bg-cyan-500/10 hover:text-cyan-300 rounded-lg flex items-center justify-between group transition-colors"
+                className="w-full text-left px-3 py-2 hover:bg-[#1a1535]/50 rounded-xl flex items-center justify-between group transition-colors cursor-pointer"
               >
-                <span className="flex items-center gap-2">
-                  <Settings size={13} className="text-gray-400 group-hover:text-cyan-300" />
+                <span className="flex items-center gap-2 text-purple-300 group-hover:text-cyan-300">
+                  <Settings size={13} className="text-purple-400/60 group-hover:text-cyan-300" />
                   Toggle Interactive Terminal Sandbox
                 </span>
-                <span className="text-[10px] bg-[#21262d] text-gray-400 px-1.5 py-0.5 rounded">Ctrl + `</span>
+                <span className="text-[10px] bg-purple-950 border border-purple-500/30 text-purple-300 px-1.5 py-0.5 rounded">Ctrl + `</span>
               </button>
 
-              <div className="h-[1px] bg-[#30363d] my-2" />
+              <div className="h-[1px] bg-purple-500/20 my-2" />
 
-              <div className="px-3 py-1.5 text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+              <div className="px-3 py-1.5 text-[10px] font-bold text-purple-400/50 uppercase tracking-wider">
                 Active Discussions ({channels.length})
               </div>
               
@@ -2173,9 +2214,9 @@ export default function ChatWorkspace({
                     selectChannel(chan.id);
                     setIsCommandPaletteOpen(false);
                   }}
-                  className="w-full text-left px-3 py-1.5 hover:bg-gray-800 rounded-md flex items-center gap-2 text-gray-300 hover:text-white"
+                  className="w-full text-left px-3 py-1.5 hover:bg-[#1a1535]/50 rounded-lg flex items-center gap-2 text-purple-200 hover:text-cyan-300 transition-colors cursor-pointer"
                 >
-                  <Hash size={11} className="text-gray-500" />
+                  <Hash size={11} className="text-purple-400/60" />
                   <span>#{chan.name}</span>
                 </button>
               ))}

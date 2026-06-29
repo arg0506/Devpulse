@@ -8,6 +8,9 @@ export interface DevUser {
   customStatus?: string;
   streakCount: number;
   xpPoints: number;
+  tier?: 'Sovereign' | 'Pro' | 'Enterprise';
+  paymentStatus?: string;
+  paymentIntentId?: string;
 }
 
 export interface CodeSnippet {

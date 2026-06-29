@@ -9,7 +9,13 @@ import {
   PenTool, 
   Eraser, 
   Sparkles,
-  RefreshCw
+  RefreshCw,
+  Type,
+  Triangle,
+  Download,
+  Undo2,
+  Grid,
+  CircleDot
 } from 'lucide-react';
 import { socket } from '../socket';
 import { WhiteboardElement, WhiteboardTool, DevUser } from '../types';
@@ -20,12 +26,12 @@ interface WhiteboardProps {
 }
 
 const COLORS = [
-  '#f85149', // Red
-  '#58a6ff', // Blue
-  '#3fb950', // Green
-  '#eed812', // Yellow
-  '#d854ff', // Purple
-  '#ffffff', // White
+  '#06b6d4', // neon cyan
+  '#ec4899', // neon pink
+  '#7c3aed', // neon violet
+  '#22c55e', // pulsing lime green
+  '#eab308', // glowing yellow
+  '#ffffff', // starlight white
 ];
 
 export default function Whiteboard({ currentUser, onClose }: WhiteboardProps) {
@@ -33,10 +39,19 @@ export default function Whiteboard({ currentUser, onClose }: WhiteboardProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   
   const [elements, setElements] = useState<WhiteboardElement[]>([]);
-  const [tool, setTool] = useState<WhiteboardTool>('line');
-  const [color, setColor] = useState<string>('#58a6ff');
+  const [tool, setTool] = useState<WhiteboardTool | 'triangle'>('line');
+  const [color, setColor] = useState<string>('#06b6d4');
   const [isDrawing, setIsDrawing] = useState<boolean>(false);
   const [currentElement, setCurrentElement] = useState<Partial<WhiteboardElement> | null>(null);
+
+  // Advanced features state
+  const [lineWidth, setLineWidth] = useState<number>(3);
+  const [showGrid, setShowGrid] = useState<boolean>(true);
+  
+  // Text tool state
+  const [inputPos, setInputPos] = useState<{ x: number; y: number } | null>(null);
+  const [showTextInput, setShowTextInput] = useState<boolean>(false);
+  const [textValue, setTextValue] = useState<string>('');
 
   // Resize canvas safely with ResizeObserver
   useEffect(() => {
@@ -69,7 +84,7 @@ export default function Whiteboard({ currentUser, onClose }: WhiteboardProps) {
     return () => {
       resizeObserver.disconnect();
     };
-  }, [elements]);
+  }, [elements, showGrid]);
 
   // Initial load and Socket.io listeners
   useEffect(() => {
@@ -121,20 +136,22 @@ export default function Whiteboard({ currentUser, onClose }: WhiteboardProps) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     // Grid System for VS Code feel
-    ctx.strokeStyle = '#21262d';
-    ctx.lineWidth = 0.5;
-    const gridSize = 25;
-    for (let x = 0; x < canvas.width; x += gridSize) {
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, canvas.height);
-      ctx.stroke();
-    }
-    for (let y = 0; y < canvas.height; y += gridSize) {
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(canvas.width, y);
-      ctx.stroke();
+    if (showGrid) {
+      ctx.strokeStyle = '#21262d';
+      ctx.lineWidth = 0.5;
+      const gridSize = 25;
+      for (let x = 0; x < canvas.width; x += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+        ctx.stroke();
+      }
+      for (let y = 0; y < canvas.height; y += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y);
+        ctx.stroke();
+      }
     }
 
     // Draw saved elements
@@ -151,13 +168,14 @@ export default function Whiteboard({ currentUser, onClose }: WhiteboardProps) {
   // Run redraw every time elements or active element changes
   useEffect(() => {
     redraw();
-  }, [elements, currentElement]);
+  }, [elements, currentElement, showGrid]);
 
   // Helper function to render a single shape
   const drawElement = (ctx: CanvasRenderingContext2D, elem: WhiteboardElement) => {
     ctx.strokeStyle = elem.color;
     ctx.fillStyle = elem.color;
-    ctx.lineWidth = elem.type === 'rectangle' || elem.type === 'circle' ? 2 : 3;
+    const strokeWidth = (elem as any).lineWidth || (elem.type === 'rectangle' || elem.type === 'circle' ? 2 : 3);
+    ctx.lineWidth = strokeWidth;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
@@ -172,6 +190,20 @@ export default function Whiteboard({ currentUser, onClose }: WhiteboardProps) {
         const ry = elem.height / 2;
         ctx.ellipse(elem.x + rx, elem.y + ry, Math.abs(rx), Math.abs(ry), 0, 0, 2 * Math.PI);
         ctx.stroke();
+        break;
+
+      case 'triangle' as any:
+        ctx.beginPath();
+        ctx.moveTo(elem.x + elem.width / 2, elem.y);
+        ctx.lineTo(elem.x + elem.width, elem.y + elem.height);
+        ctx.lineTo(elem.x, elem.y + elem.height);
+        ctx.closePath();
+        ctx.stroke();
+        break;
+
+      case 'text':
+        ctx.font = `bold 14px "JetBrains Mono", ui-monospace, SFMono-Regular, monospace`;
+        ctx.fillText(elem.text || '', elem.x, elem.y);
         break;
 
       case 'line':
@@ -215,6 +247,13 @@ export default function Whiteboard({ currentUser, onClose }: WhiteboardProps) {
     const startX = e.clientX - rect.left;
     const startY = e.clientY - rect.top;
 
+    if (tool === 'text') {
+      setInputPos({ x: startX, y: startY });
+      setTextValue('');
+      setShowTextInput(true);
+      return;
+    }
+
     setIsDrawing(true);
 
     const newId = `draw-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
@@ -225,11 +264,12 @@ export default function Whiteboard({ currentUser, onClose }: WhiteboardProps) {
       y: startY,
       width: 0,
       height: 0,
-      color: tool === 'eraser' ? '#0d1117' : color, // background color for eraser
+      color: tool === 'eraser' ? '#08060f' : color, // background color for eraser
       createdBy: currentUser.id,
       username: currentUser.username,
       points: tool === 'line' || tool === 'eraser' ? [startX, startY] : [],
-    };
+      lineWidth: tool === 'eraser' ? lineWidth * 2.5 : lineWidth,
+    } as any;
 
     setCurrentElement(initialElem);
   };
@@ -267,28 +307,71 @@ export default function Whiteboard({ currentUser, onClose }: WhiteboardProps) {
     setCurrentElement(null);
   };
 
+  // Submit typed text on board
+  const handleTextSubmit = (val: string) => {
+    if (!val.trim() || !inputPos) {
+      setShowTextInput(false);
+      return;
+    }
+
+    const newId = `draw-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const newElem: WhiteboardElement = {
+      id: newId,
+      type: 'text',
+      x: inputPos.x,
+      y: inputPos.y,
+      width: val.length * 8,
+      height: 18,
+      color: color,
+      createdBy: currentUser.id,
+      username: currentUser.username,
+      text: val,
+    };
+
+    setElements((prev) => [...prev, newElem]);
+    socket.emit('whiteboard:draw', newElem);
+    setShowTextInput(false);
+    setInputPos(null);
+  };
+
   const handleClear = () => {
     setElements([]);
     socket.emit('whiteboard:clear');
   };
 
-  const handleDeleteElement = (id: string) => {
-    setElements((prev) => prev.filter((e) => e.id !== id));
-    socket.emit('whiteboard:delete', id);
+  // Undo your last drawing element
+  const handleUndo = () => {
+    const myElements = elements.filter(e => e.createdBy === currentUser.id);
+    if (myElements.length === 0) return;
+    
+    const lastMyElem = myElements[myElements.length - 1];
+    setElements((prev) => prev.filter((e) => e.id !== lastMyElem.id));
+    socket.emit('whiteboard:delete', lastMyElem.id);
+  };
+
+  // Export board as PNG
+  const handleExportPNG = () => {
+    if (!canvasRef.current) return;
+    
+    // Create a temporary link
+    const link = document.createElement('a');
+    link.download = `devpulse-codesign-${Date.now()}.png`;
+    link.href = canvasRef.current.toDataURL('image/png');
+    link.click();
   };
 
   return (
-    <div className="flex-1 flex flex-col bg-[#07090e] relative">
+    <div className="flex-1 flex flex-col bg-[#08060f] relative h-full overflow-hidden">
       {/* Toolbar */}
-      <div className="bg-[#0c0e15]/95 border-b border-[#1f293d] p-4 flex flex-wrap items-center justify-between gap-4 z-10 backdrop-blur-md shadow-md">
+      <div className="bg-[#110d24]/90 border-b border-purple-500/20 p-4 flex flex-wrap items-center justify-between gap-4 z-10 backdrop-blur-xl shadow-[0_4px_30px_rgba(0,0,0,0.4)]">
         {/* Draw tools */}
-        <div className="flex items-center gap-1 bg-[#05060a] p-1.5 border border-[#1f293d] rounded-xl shadow-inner">
+        <div className="flex items-center gap-1 bg-[#161230]/75 p-1.5 border border-purple-500/30 rounded-xl">
           <button
             onClick={() => setTool('line')}
             className={`p-2 rounded-lg transition-all cursor-pointer ${
               tool === 'line' 
-                ? 'bg-cyan-500/25 text-cyan-400 border border-cyan-500/35 shadow-[0_0_10px_rgba(6,182,212,0.15)] font-bold' 
-                : 'text-gray-400 hover:text-white hover:bg-white/[0.02] border border-transparent'
+                ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/45 shadow-[0_0_15px_rgba(6,182,212,0.25)] font-bold' 
+                : 'text-purple-300/60 hover:text-white hover:bg-purple-900/20 border border-transparent'
             }`}
             title="Free Pencil"
           >
@@ -298,8 +381,8 @@ export default function Whiteboard({ currentUser, onClose }: WhiteboardProps) {
             onClick={() => setTool('rectangle')}
             className={`p-2 rounded-lg transition-all cursor-pointer ${
               tool === 'rectangle' 
-                ? 'bg-cyan-500/25 text-cyan-400 border border-cyan-500/35 shadow-[0_0_10px_rgba(6,182,212,0.15)] font-bold' 
-                : 'text-gray-400 hover:text-white hover:bg-white/[0.02] border border-transparent'
+                ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/45 shadow-[0_0_15px_rgba(6,182,212,0.25)] font-bold' 
+                : 'text-purple-300/60 hover:text-white hover:bg-purple-900/20 border border-transparent'
             }`}
             title="Rectangle"
           >
@@ -309,30 +392,52 @@ export default function Whiteboard({ currentUser, onClose }: WhiteboardProps) {
             onClick={() => setTool('circle')}
             className={`p-2 rounded-lg transition-all cursor-pointer ${
               tool === 'circle' 
-                ? 'bg-cyan-500/25 text-cyan-400 border border-cyan-500/35 shadow-[0_0_10px_rgba(6,182,212,0.15)] font-bold' 
-                : 'text-gray-400 hover:text-white hover:bg-white/[0.02] border border-transparent'
+                ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/45 shadow-[0_0_15px_rgba(6,182,212,0.25)] font-bold' 
+                : 'text-purple-300/60 hover:text-white hover:bg-purple-900/20 border border-transparent'
             }`}
             title="Circle"
           >
             <Circle size={16} />
           </button>
           <button
+            onClick={() => setTool('triangle')}
+            className={`p-2 rounded-lg transition-all cursor-pointer ${
+              tool === 'triangle' 
+                ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/45 shadow-[0_0_15px_rgba(6,182,212,0.25)] font-bold' 
+                : 'text-purple-300/60 hover:text-white hover:bg-purple-900/20 border border-transparent'
+            }`}
+            title="Triangle"
+          >
+            <Triangle size={16} />
+          </button>
+          <button
             onClick={() => setTool('arrow')}
             className={`p-2 rounded-lg transition-all cursor-pointer ${
               tool === 'arrow' 
-                ? 'bg-cyan-500/25 text-cyan-400 border border-cyan-500/35 shadow-[0_0_10px_rgba(6,182,212,0.15)] font-bold' 
-                : 'text-gray-400 hover:text-white hover:bg-white/[0.02] border border-transparent'
+                ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/45 shadow-[0_0_15px_rgba(6,182,212,0.25)] font-bold' 
+                : 'text-purple-300/60 hover:text-white hover:bg-purple-900/20 border border-transparent'
             }`}
             title="Vector Arrow"
           >
             <ArrowRight size={16} />
           </button>
           <button
+            onClick={() => setTool('text')}
+            className={`p-2 rounded-lg transition-all cursor-pointer ${
+              tool === 'text' 
+                ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/45 shadow-[0_0_15px_rgba(6,182,212,0.25)] font-bold' 
+                : 'text-purple-300/60 hover:text-white hover:bg-purple-900/20 border border-transparent'
+            }`}
+            title="Text Label"
+          >
+            <Type size={16} />
+          </button>
+          <button
             onClick={() => setTool('eraser')}
             className={`p-2 rounded-lg transition-all cursor-pointer ${
               tool === 'eraser' 
-                ? 'bg-cyan-500/25 text-cyan-400 border border-cyan-500/35 shadow-[0_0_10px_rgba(6,182,212,0.15)] font-bold' 
-                : 'text-gray-400 hover:text-white hover:bg-white/[0.02] border border-transparent'
+                ? 'bg-pink-500/20 text-pink-400 border border-pink-500/45 shadow-[0_0_15px_rgba(236,72,153,0.25)] font-bold' 
+                : 'text-purple-300/60 hover:text-white hover:bg-purple-900/20 border border-transparent'
             }`}
             title="Eraser tool"
           >
@@ -340,16 +445,34 @@ export default function Whiteboard({ currentUser, onClose }: WhiteboardProps) {
           </button>
         </div>
 
+        {/* Brush Stroke thickness selection */}
+        <div className="flex items-center gap-1.5 bg-[#161230]/75 p-1.5 border border-purple-500/30 rounded-xl">
+          <span className="text-[10px] font-mono font-bold text-purple-400 uppercase px-1.5">Weight:</span>
+          {[2, 5, 10].map((w) => (
+            <button
+              key={w}
+              onClick={() => setLineWidth(w)}
+              className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold transition-all cursor-pointer ${
+                lineWidth === w 
+                  ? 'bg-cyan-500/30 text-cyan-400 border border-cyan-500/40 font-bold' 
+                  : 'text-purple-300/55 hover:text-white hover:bg-purple-950/30 border border-transparent'
+              }`}
+            >
+              {w === 2 ? 'Thin' : w === 5 ? 'Medium' : 'Thick'}
+            </button>
+          ))}
+        </div>
+
         {/* Colors selector */}
         {tool !== 'eraser' && (
-          <div className="flex items-center gap-2 bg-[#05060a] p-1.5 border border-[#1f293d] rounded-xl shadow-inner">
+          <div className="flex items-center gap-2 bg-[#161230]/75 p-1.5 border border-purple-500/30 rounded-xl">
             {COLORS.map((c) => (
               <button
                 key={c}
                 onClick={() => setColor(c)}
                 style={{ backgroundColor: c }}
-                className={`w-5 h-5 rounded-full border-2 transition-all cursor-pointer hover:scale-110 ${
-                  color === c ? 'border-white scale-110 shadow-[0_0_8px_rgba(255,255,255,0.4)]' : 'border-[#121620] hover:border-gray-400'
+                className={`w-5 h-5 rounded-full border transition-all cursor-pointer hover:scale-125 ${
+                  color === c ? 'border-white scale-110 shadow-[0_0_10px_rgba(255,255,255,0.8)]' : 'border-transparent'
                 }`}
               />
             ))}
@@ -357,20 +480,56 @@ export default function Whiteboard({ currentUser, onClose }: WhiteboardProps) {
         )}
 
         {/* Global Controls */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Grid toggler */}
+          <button
+            onClick={() => setShowGrid(!showGrid)}
+            className={`flex items-center gap-1 px-3 py-1.5 rounded-xl border font-mono text-[10px] font-bold transition-all cursor-pointer ${
+              showGrid 
+                ? 'bg-purple-950/40 text-purple-300 border-purple-500/30' 
+                : 'bg-black/30 text-purple-300/40 border-purple-500/10'
+            }`}
+            title="Toggle Visual Grid"
+          >
+            <Grid size={12} />
+            <span>GRID</span>
+          </button>
+
+          {/* Undo */}
+          <button
+            onClick={handleUndo}
+            disabled={elements.filter(e => e.createdBy === currentUser.id).length === 0}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-xl border font-mono text-[10px] font-bold bg-[#161230]/65 text-purple-300 border-purple-500/25 hover:border-cyan-500/50 hover:text-cyan-400 disabled:opacity-40 disabled:pointer-events-none transition-all cursor-pointer"
+            title="Undo last action"
+          >
+            <Undo2 size={12} />
+            <span>UNDO</span>
+          </button>
+
+          {/* Download Image */}
+          <button
+            onClick={handleExportPNG}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-xl border font-mono text-[10px] font-bold bg-[#161230]/65 text-cyan-400 border-cyan-500/25 hover:border-cyan-400 hover:text-white transition-all cursor-pointer"
+            title="Export Sketch as PNG"
+          >
+            <Download size={12} />
+            <span>PNG</span>
+          </button>
+
+          {/* Clear canvas */}
           <button
             onClick={handleClear}
-            className="flex items-center gap-1.5 text-xs px-3.5 py-2 bg-red-950/20 hover:bg-red-950/40 text-red-400 border border-red-500/30 rounded-xl transition-all shadow-sm cursor-pointer hover:-translate-y-0.5"
+            className="flex items-center gap-1.5 text-xs px-3.5 py-1.5 bg-pink-950/20 hover:bg-pink-950/40 text-pink-400 border border-pink-500/35 hover:border-pink-500 rounded-xl transition-all cursor-pointer font-bold font-mono shadow-[0_0_12px_rgba(236,72,153,0.15)]"
             title="Clear all doodles"
           >
-            <Trash2 size={13} />
-            <span className="font-semibold tracking-wider uppercase text-[10px]">Clear Canvas</span>
+            <Trash2 size={12} />
+            <span className="font-bold tracking-wider uppercase text-[10px]">Clear</span>
           </button>
         </div>
       </div>
 
       {/* Interactive Drawing Canvas */}
-      <div ref={containerRef} className="flex-1 relative overflow-hidden bg-[#07090e] cursor-crosshair">
+      <div ref={containerRef} className="flex-1 relative overflow-hidden bg-[#08060f] cursor-crosshair">
         <canvas
           ref={canvasRef}
           onMouseDown={handleMouseDown}
@@ -379,10 +538,40 @@ export default function Whiteboard({ currentUser, onClose }: WhiteboardProps) {
           className="absolute inset-0"
         />
 
+        {/* Text Input floating on board */}
+        {showTextInput && inputPos && (
+          <div 
+            style={{ 
+              position: 'absolute', 
+              left: `${inputPos.x}px`, 
+              top: `${inputPos.y - 12}px`, 
+              zIndex: 30 
+            }}
+            className="animate-in fade-in zoom-in-95 duration-150"
+          >
+            <input
+              type="text"
+              autoFocus
+              value={textValue}
+              onChange={(e) => setTextValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleTextSubmit(textValue);
+                if (e.key === 'Escape') {
+                  setShowTextInput(false);
+                  setInputPos(null);
+                }
+              }}
+              onBlur={() => handleTextSubmit(textValue)}
+              className="bg-[#120a2e] border-2 border-cyan-400 text-white font-mono text-xs px-2.5 py-1 rounded-xl shadow-[0_0_15px_rgba(6,182,212,0.5)] outline-none min-w-[150px] focus:ring-0 text-left"
+              placeholder="Label content..."
+            />
+          </div>
+        )}
+
         {/* Float user badge */}
-        <div className="absolute top-5 left-5 pointer-events-none bg-[#0e121a]/90 border border-[#1f293d] px-4 py-2 rounded-xl flex items-center gap-2 text-xs text-[#8b9ba8] shadow-2xl backdrop-blur-md">
-          <Sparkles size={12} className="text-yellow-400 animate-pulse" />
-          <span className="font-mono text-[11px] tracking-wide">COLLABORATIVE DESIGN TERMINAL: ACTIVE</span>
+        <div className="absolute top-5 left-5 pointer-events-none bg-[#110d24]/90 border border-purple-500/25 px-4 py-2 rounded-xl flex items-center gap-2 text-xs text-purple-200 shadow-[0_8px_32px_rgba(0,0,0,0.5)] backdrop-blur-xl font-mono">
+          <Sparkles size={12} className="text-pink-500 animate-pulse" />
+          <span className="font-mono text-[11px] font-bold tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-300">COLLABORATIVE DESIGN TERMINAL: ACTIVE</span>
         </div>
       </div>
     </div>

@@ -18,6 +18,12 @@ let connectionChecked = false;
 
 export async function checkPrismaConnection(): Promise<boolean> {
   if (connectionChecked) return prismaActive;
+  if (!isDbUrlValid) {
+    prismaActive = false;
+    connectionChecked = true;
+    console.log('[Database] DATABASE_URL not provisioned. Seamlessly active in offline local JSON storage mode.');
+    return false;
+  }
   try {
     // Run a query with a short timeout to check if the database is active and reachable
     await Promise.race([
@@ -28,7 +34,7 @@ export async function checkPrismaConnection(): Promise<boolean> {
     console.log('[Prisma] Database connection verified successfully. SQL mode active.');
   } catch (err: any) {
     prismaActive = false;
-    console.warn('[Prisma Warning] Database connection failed or is unprovisioned. Falling back to local JSON storage.');
+    console.warn('[Prisma Warning] Database connection failed. Falling back to local JSON storage.');
   } finally {
     connectionChecked = true;
   }

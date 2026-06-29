@@ -129,13 +129,13 @@ export default function Terminal({ onClose, userId, username }: TerminalProps) {
   };
 
   return (
-    <div className="bg-[#080a0f]/95 border-t border-[#1e293b] flex flex-col h-80 font-mono text-xs shadow-[0_-15px_30px_rgba(0,0,0,0.7)] z-40 relative backdrop-blur-md">
+    <div className="bg-[#0c091d]/95 border-t border-purple-500/20 flex flex-col h-80 font-mono text-xs shadow-[0_-10px_40px_rgba(0,0,0,0.6)] z-40 relative backdrop-blur-xl">
       {/* Terminal Title Bar */}
-      <div className="bg-[#0e1118]/90 px-5 py-3 flex items-center justify-between border-b border-[#1e293b] text-[#8b9ba8]">
+      <div className="bg-[#110d24]/90 px-5 py-3 flex items-center justify-between border-b border-purple-500/25 text-purple-200">
         <div className="flex items-center gap-2.5">
-          <TerminalIcon size={14} className="text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]" />
-          <span className="text-xs font-bold tracking-wider text-[#e1e4ea]">Console Interactive Sandbox Pipeline</span>
-          <span className="text-[9px] bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full font-bold tracking-wider uppercase animate-pulse">
+          <TerminalIcon size={14} className="text-cyan-400 drop-shadow-[0_0_8px_rgba(6,182,212,0.5)]" />
+          <span className="text-xs font-serif font-bold text-transparent bg-clip-text bg-gradient-to-r from-white to-purple-200">Console Interactive Sandbox Pipeline</span>
+          <span className="text-[9px] bg-cyan-950/80 text-cyan-400 border border-cyan-500/30 px-2 py-0.5 rounded-full font-bold tracking-wider uppercase animate-pulse">
             CLUSTER ONLINE
           </span>
         </div>
@@ -153,7 +153,7 @@ export default function Terminal({ onClose, userId, username }: TerminalProps) {
           </button>
           <button
             onClick={onClose}
-            className="hover:text-white hover:bg-white/[0.05] p-1 rounded transition-all cursor-pointer text-gray-500"
+            className="hover:text-white hover:bg-white/[0.05] p-1 rounded-md transition-all cursor-pointer text-purple-400"
             title="Close Terminal (Ctrl + `)"
           >
             <X size={14} />
@@ -162,7 +162,7 @@ export default function Terminal({ onClose, userId, username }: TerminalProps) {
       </div>
 
       {/* Terminal Lines Output */}
-      <div className="flex-1 overflow-y-auto p-5 space-y-2.5 scrollbar-thin scrollbar-thumb-cyan-950 scrollbar-track-transparent">
+      <div className="flex-1 overflow-y-auto p-5 space-y-2.5 bg-[#08060f]/95 text-purple-200 scrollbar-thin scrollbar-thumb-purple-900 scrollbar-track-transparent">
         {history.map((line, idx) => (
           <div
             key={idx}
@@ -170,10 +170,10 @@ export default function Terminal({ onClose, userId, username }: TerminalProps) {
               line.type === 'input' 
                 ? 'text-cyan-400 font-semibold' 
                 : line.isError 
-                  ? 'text-red-400 border-l-2 border-red-500/60 pl-2 bg-red-950/10 py-1' 
+                  ? 'text-pink-400 border-l-2 border-pink-500/60 pl-2 bg-pink-950/10 py-1' 
                   : line.isPending
                     ? 'text-yellow-400 animate-pulse font-semibold'
-                    : 'text-[#c0c6d3]'
+                    : 'text-purple-100/90'
             }`}
           >
             {formatText(line.text)}
@@ -183,9 +183,9 @@ export default function Terminal({ onClose, userId, username }: TerminalProps) {
       </div>
 
       {/* Terminal Interactive Input */}
-      <form onSubmit={handleSubmit} className="border-t border-[#1e293b] bg-[#06080c]/90 px-5 py-3 flex items-center gap-3">
-        <ChevronRight size={16} className="text-emerald-400 drop-shadow-[0_0_5px_rgba(52,211,153,0.5)] flex-shrink-0 animate-pulse" />
-        <span className="text-cyan-500 font-bold font-mono text-xs select-none">dp_cluster:~</span>
+      <form onSubmit={handleSubmit} className="border-t border-purple-500/20 bg-[#0d0a22]/95 px-5 py-3 flex items-center gap-3">
+        <ChevronRight size={16} className="text-cyan-400 flex-shrink-0 animate-pulse" />
+        <span className="text-purple-400 font-bold font-mono text-xs select-none">dp_cluster:~</span>
         <input
           ref={inputRef}
           type="text"
@@ -193,7 +193,7 @@ export default function Terminal({ onClose, userId, username }: TerminalProps) {
           onChange={(e) => setCommand(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Type 'git status', 'pulse-stats', 'ai summarize react', or 'help'..."
-          className="flex-1 bg-transparent border-none outline-none focus:ring-0 text-[#e1e4ea] font-mono text-xs placeholder-gray-600 tracking-wider"
+          className="flex-1 bg-transparent border-none outline-none focus:ring-0 text-white font-mono text-xs placeholder-purple-300/30 tracking-wider"
           autoComplete="off"
           autoCorrect="off"
           autoCapitalize="off"
@@ -201,7 +201,7 @@ export default function Terminal({ onClose, userId, username }: TerminalProps) {
         />
         <button
           type="submit"
-          className="bg-cyan-500/10 border border-cyan-500/25 text-cyan-400 hover:bg-cyan-500 hover:text-black transition-all px-3 py-1 rounded-md text-[10px] font-bold tracking-wider uppercase flex items-center gap-1 cursor-pointer"
+          className="bg-gradient-to-r from-purple-600 to-indigo-600 border border-purple-400/30 text-white hover:from-purple-500 hover:to-indigo-500 shadow-[0_0_10px_rgba(124,58,237,0.3)] transition-all px-3 py-1.5 rounded-lg text-[10px] font-bold tracking-wider uppercase flex items-center gap-1 cursor-pointer"
           title="Run Command"
         >
           <span>Run</span>
