@@ -12,7 +12,10 @@ const USERNAME_RE = /^[a-z0-9_]{3,20}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function normaliseUsername(raw: string): string {
-  return String(raw || '').trim().toLowerCase().replace(/\s+/g, '_');
+  return String(raw || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '_');
 }
 
 function buildProfile(id: string, body: any, username: string): DevUser {
@@ -150,7 +153,10 @@ router.patch('/me', authMiddleware, async (req: AuthenticatedRequest, res: Respo
 
   if (isPrismaEnabled()) {
     prisma.user
-      .update({ where: { id: req.user!.userId }, data: { bio: updated.bio ?? null, gitHubHandle: updated.gitHubHandle ?? null, techTags: updated.skills } })
+      .update({
+        where: { id: req.user!.userId },
+        data: { bio: updated.bio ?? null, gitHubHandle: updated.gitHubHandle ?? null, techTags: updated.skills },
+      })
       .catch((err) => console.warn('[auth] profile sync to Postgres failed:', err.message));
   }
   return res.json(updated);

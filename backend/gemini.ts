@@ -20,8 +20,7 @@ export function isGeminiReady(): boolean {
   return client !== null;
 }
 
-export const OFFLINE_NOTICE =
-  'Gemini is not connected. Add `GEMINI_API_KEY` to your `.env` file and restart the server to get live answers.';
+export const OFFLINE_NOTICE = 'Gemini is not connected. Add `GEMINI_API_KEY` to your `.env` file and restart the server to get live answers.';
 
 export async function generateText(prompt: string, opts: { systemInstruction?: string; temperature?: number } = {}): Promise<string> {
   if (!client) return OFFLINE_NOTICE;

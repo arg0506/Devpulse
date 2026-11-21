@@ -26,7 +26,9 @@ router.post('/', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
 
   const event = db.createEvent({
     title: String(title).trim().slice(0, 80),
-    description: String(description || '').trim().slice(0, 500),
+    description: String(description || '')
+      .trim()
+      .slice(0, 500),
     date: new Date(parsed).toISOString(),
     meetLink: String(meetLink || '').trim(),
     creator: req.user!.username,

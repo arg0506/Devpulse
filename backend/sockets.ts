@@ -126,7 +126,9 @@ export function initSockets(server: HTTPServer) {
     io.to(`channel:${msg.channelId}`).emit('message:new', msg);
     const channel = db.getChannel(msg.channelId);
     if (channel?.category === 'Direct Messages') {
-      (channel.members || []).forEach((id) => io.to(`user:${id}`).emit('channel:activity', { channelId: msg.channelId, messageId: msg.id, userId: msg.userId }));
+      (channel.members || []).forEach((id) =>
+        io.to(`user:${id}`).emit('channel:activity', { channelId: msg.channelId, messageId: msg.id, userId: msg.userId }),
+      );
     } else {
       io.emit('channel:activity', { channelId: msg.channelId, messageId: msg.id, userId: msg.userId });
     }
@@ -190,7 +192,12 @@ export function initSockets(server: HTTPServer) {
     });
 
     socket.on('channel:create', (input: { name: string; description?: string; category?: 'Channels' | 'Guilds' }, ack?: (c: any) => void) => {
-      const name = String(input?.name || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 32);
+      const name = String(input?.name || '')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '')
+        .slice(0, 32);
       if (name.length < 2) return ack?.({ error: 'Channel names need at least 2 letters or numbers.' });
       const created = db.createChannel({
         name,
@@ -212,6 +219,7 @@ export function initSockets(server: HTTPServer) {
       const evt = db.getEvent(eventId);
       if (!evt) return ack?.({ error: 'That event no longer exists.' });
       const channel = db.createChannel({ id: `event-${evt.id}`, name: evt.title, description: `Discussion for ${evt.title}`, category: 'Events' });
+      socket.emit('channel:new', channel);
       ack?.({ channel });
     });
 
@@ -226,7 +234,9 @@ export function initSockets(server: HTTPServer) {
     // ---------- Messages ----------
     socket.on('message:send', (input: { channelId: string; text: string; codeSnippet?: CodeSnippet }) => {
       const channelId = String(input?.channelId || '');
-      const text = String(input?.text || '').trim().slice(0, MAX_MESSAGE_LENGTH);
+      const text = String(input?.text || '')
+        .trim()
+        .slice(0, MAX_MESSAGE_LENGTH);
       const snippet = sanitiseSnippet(input?.codeSnippet);
       if (!channelId || (!text && !snippet) || !db.canAccessChannel(channelId, userId)) return;
       if (!db.getChannel(channelId)) return;
@@ -273,7 +283,9 @@ export function initSockets(server: HTTPServer) {
 
     socket.on('thread:send-reply', ({ messageId, text }: { messageId: string; text: string }) => {
       const parent = db.getMessage(messageId);
-      const body = String(text || '').trim().slice(0, MAX_MESSAGE_LENGTH);
+      const body = String(text || '')
+        .trim()
+        .slice(0, MAX_MESSAGE_LENGTH);
       if (!parent || !body || !db.canAccessChannel(parent.channelId, userId)) return;
       const author = me();
       const reply: ThreadReply = {
@@ -351,24 +363,34 @@ export function initSockets(server: HTTPServer) {
           break;
         case 'whoami': {
           const u = me();
-          respond(`${u.avatarEmoji} ${c('accent', '@' + u.username)}  ${u.role}\n  plan ${c('ok', u.tier || 'Free')} · ${u.xpPoints} XP · ${u.streakCount}-day streak\n  skills ${u.skills.join(', ') || '—'}`);
+          respond(
+            `${u.avatarEmoji} ${c('accent', '@' + u.username)}  ${u.role}\n  plan ${c('ok', u.tier || 'Free')} · ${u.xpPoints} XP · ${u.streakCount}-day streak\n  skills ${u.skills.join(', ') || '—'}`,
+          );
           break;
         }
         case 'users': {
           const online = db.getUsers().filter((u) => BOT_IDS.has(u.id) || (connectionCounts.get(u.id) || 0) > 0);
-          respond(`${online.length} online\n` + online.map((u) => `  ${u.avatarEmoji} ${c('ok', '@' + u.username)}  ${c('muted', u.role)}`).join('\n'));
+          respond(
+            `${online.length} online\n` + online.map((u) => `  ${u.avatarEmoji} ${c('ok', '@' + u.username)}  ${c('muted', u.role)}`).join('\n'),
+          );
           break;
         }
         case 'channels': {
           const list = db.getChannelsForUser(userId).filter((ch) => ch.category === 'Channels' || ch.category === 'Guilds');
-          respond(list.map((ch) => `  ${c('accent', '#' + ch.name)}  ${c('muted', `${db.getMessages(ch.id, 100000).length} msgs`)}  ${ch.description}`).join('\n'));
+          respond(
+            list
+              .map((ch) => `  ${c('accent', '#' + ch.name)}  ${c('muted', `${db.getMessages(ch.id, 100000).length} msgs`)}  ${ch.description}`)
+              .join('\n'),
+          );
           break;
         }
         case 'events': {
           const upcoming = db.getEvents().filter((e) => Date.parse(e.date) > Date.now() - 3600000);
           respond(
             upcoming.length
-              ? upcoming.map((e) => `  ${c('warn', new Date(e.date).toUTCString().slice(0, 22))}  ${e.title}  ${c('muted', `${e.rsvps.length} going`)}`).join('\n')
+              ? upcoming
+                  .map((e) => `  ${c('warn', new Date(e.date).toUTCString().slice(0, 22))}  ${e.title}  ${c('muted', `${e.rsvps.length} going`)}`)
+                  .join('\n')
               : 'No upcoming events.',
           );
           break;

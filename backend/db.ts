@@ -119,7 +119,7 @@ const INITIAL_MESSAGES: DevMessage[] = [
     role: 'DevPulse',
     avatarEmoji: '🤖',
     isBot: true,
-    text: 'Welcome to **DevPulse**. Chat in channels, sketch architecture on the board, wire up agents in the studio, and press `Ctrl + `` ` for the console. Mention `@gemini` anywhere to ask the AI.',
+    text: 'Welcome to **DevPulse**. Chat in channels, sketch architecture on the whiteboard, wire up agents in the studio and open the console with Ctrl + backtick. Mention @gemini in any channel to ask the AI.',
     timestamp: new Date(Date.now() - 3600000 * 3).toISOString(),
     repliesCount: 0,
     reactions: [{ emoji: '🚀', userIds: ['system-bot'] }],
@@ -145,24 +145,54 @@ const INITIAL_MESSAGES: DevMessage[] = [
 
 const PRESET_USERS: Record<string, DevUser> = {
   'alex-g': {
-    id: 'alex-g', username: 'alex_g', role: 'Lead Python Architect', avatarEmoji: '🐍',
-    skills: ['Python', 'Docker', 'Django'], status: 'offline', streakCount: 8, xpPoints: 180,
+    id: 'alex-g',
+    username: 'alex_g',
+    role: 'Lead Python Architect',
+    avatarEmoji: '🐍',
+    skills: ['Python', 'Docker', 'Django'],
+    status: 'offline',
+    streakCount: 8,
+    xpPoints: 180,
   },
   'react-guru': {
-    id: 'react-guru', username: 'dan_abramov', role: 'Senior React Architect', avatarEmoji: '⚛️',
-    skills: ['TS', 'React', 'Tailwind'], status: 'offline', streakCount: 12, xpPoints: 240,
+    id: 'react-guru',
+    username: 'dan_abramov',
+    role: 'Senior React Architect',
+    avatarEmoji: '⚛️',
+    skills: ['TS', 'React', 'Tailwind'],
+    status: 'offline',
+    streakCount: 12,
+    xpPoints: 240,
   },
   'tailwind-master': {
-    id: 'tailwind-master', username: 'tailwind_guru', role: 'UI/UX Design Engineer', avatarEmoji: '🎨',
-    skills: ['CSS', 'Tailwind', 'HTML'], status: 'offline', streakCount: 4, xpPoints: 155,
+    id: 'tailwind-master',
+    username: 'tailwind_guru',
+    role: 'UI/UX Design Engineer',
+    avatarEmoji: '🎨',
+    skills: ['CSS', 'Tailwind', 'HTML'],
+    status: 'offline',
+    streakCount: 4,
+    xpPoints: 155,
   },
   'system-bot': {
-    id: 'system-bot', username: 'system_bot', role: 'DevPulse', avatarEmoji: '🤖',
-    skills: ['Automation'], status: 'online', streakCount: 0, xpPoints: 0,
+    id: 'system-bot',
+    username: 'system_bot',
+    role: 'DevPulse',
+    avatarEmoji: '🤖',
+    skills: ['Automation'],
+    status: 'online',
+    streakCount: 0,
+    xpPoints: 0,
   },
   'gemini-bot': {
-    id: 'gemini-bot', username: 'gemini', role: 'AI pair partner', avatarEmoji: '✨',
-    skills: ['LLM'], status: 'online', streakCount: 0, xpPoints: 0,
+    id: 'gemini-bot',
+    username: 'gemini',
+    role: 'AI pair partner',
+    avatarEmoji: '✨',
+    skills: ['LLM'],
+    status: 'online',
+    streakCount: 0,
+    xpPoints: 0,
   },
 };
 
@@ -332,9 +362,7 @@ class Database {
 
   /** Public channels plus the DMs the user participates in. */
   getChannelsForUser(userId: string): DevChannel[] {
-    return this.data.channels.filter(
-      (c) => c.category !== 'Direct Messages' || (c.members || []).includes(userId),
-    );
+    return this.data.channels.filter((c) => c.category !== 'Direct Messages' || (c.members || []).includes(userId));
   }
 
   getChannel(id: string): DevChannel | undefined {
@@ -349,7 +377,12 @@ class Database {
   }
 
   createChannel(channel: Omit<DevChannel, 'id'> & { id?: string }): DevChannel {
-    const id = channel.id || channel.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const id =
+      channel.id ||
+      channel.name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '');
     const existing = this.data.channels.find((c) => c.id === id);
     if (existing) return existing;
     const created: DevChannel = { ...channel, id };
@@ -455,7 +488,10 @@ class Database {
   }
 
   createCommunity(name: string, description: string, creatorId: string): DevCommunity {
-    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const slug = name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '');
     const id = 'comm-' + slug;
     const existing = this.data.communities.find((c) => c.id === id);
     if (existing) return existing;
@@ -476,9 +512,7 @@ class Database {
     const comm = this.data.communities.find((c) => c.id === communityId);
     if (!comm) return undefined;
     comm.members = comm.members || [];
-    comm.members = comm.members.includes(userId)
-      ? comm.members.filter((id) => id !== userId)
-      : [...comm.members, userId];
+    comm.members = comm.members.includes(userId) ? comm.members.filter((id) => id !== userId) : [...comm.members, userId];
     this.save();
     return comm;
   }
@@ -514,9 +548,7 @@ class Database {
 
   // ---------- Agent workflows ----------
   getWorkflows(ownerId: string): AgentWorkflow[] {
-    return this.data.workflows
-      .filter((w) => w.ownerId === ownerId)
-      .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
+    return this.data.workflows.filter((w) => w.ownerId === ownerId).sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
   }
 
   getWorkflow(id: string): AgentWorkflow | undefined {

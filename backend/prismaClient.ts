@@ -29,10 +29,7 @@ export async function checkPrismaConnection(): Promise<boolean> {
 
   try {
     instance = new PrismaClient({ datasources: { db: { url: dbUrl } }, log: ['error'] });
-    await Promise.race([
-      instance.$queryRaw`SELECT 1`,
-      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000)),
-    ]);
+    await Promise.race([instance.$queryRaw`SELECT 1`, new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000))]);
     prismaActive = true;
     console.log('[db] PostgreSQL connected. Messages, users and events are mirrored with Prisma.');
   } catch (err: any) {
