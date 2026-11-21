@@ -1,14 +1,10 @@
 import { io } from 'socket.io-client';
+import { getToken } from './lib/api';
 
-// Establish Socket connection to the same host serving the site
-export const socket = io(
-  typeof window !== 'undefined' 
-    ? `${window.location.protocol}//${window.location.host}` 
-    : '', 
-  {
-    autoConnect: false,
-    reconnection: true,
-    reconnectionAttempts: 10,
-    reconnectionDelay: 1000,
-  }
-);
+/** One shared connection to the DevPulse server. Connect after sign-in. */
+export const socket = io({
+  autoConnect: false,
+  reconnection: true,
+  reconnectionDelay: 1000,
+  auth: (cb) => cb({ token: getToken() }),
+});
