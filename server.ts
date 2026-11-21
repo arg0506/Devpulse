@@ -1,76 +1,84 @@
+import 'dotenv/config';
 import express from 'express';
+import cors from 'cors';
 import { createServer as createHTTPServer } from 'http';
 import path from 'path';
-import { fileURLToPath } from 'url';
-import { createServer as createViteServer } from 'vite';
 import { initSockets } from './backend/sockets';
 import { db } from './backend/db';
 import authRouter from './backend/routes/auth';
 import communitiesRouter from './backend/routes/communities';
 import eventsRouter from './backend/routes/events';
 import paymentsRouter from './backend/routes/payments';
-import { checkPrismaConnection } from './backend/prismaClient';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import agentsRouter from './backend/routes/agents';
+import { checkPrismaConnection, isPrismaEnabled } from './backend/prismaClient';
+import { authMiddleware, AuthenticatedRequest } from './backend/middleware/auth';
+import { buildPresenceList } from './backend/realtime';
+import { isGeminiReady } from './backend/gemini';
 
 async function startServer() {
-  // Check if database is reachable at startup
   await checkPrismaConnection();
 
   const app = express();
   const server = createHTTPServer(app);
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
 
-  app.use(express.json());
+  if (process.env.FRONTEND_URL) app.use(cors({ origin: process.env.FRONTEND_URL, credentials: true }));
+  app.use(express.json({ limit: '1mb' }));
 
-  // API Endpoints
   app.use('/api/auth', authRouter);
   app.use('/api/communities', communitiesRouter);
   app.use('/api/events', eventsRouter);
   app.use('/api/payments', paymentsRouter);
+  app.use('/api/agents', agentsRouter);
 
-  app.get('/api/health', (req, res) => {
-    res.json({ status: 'healthy', timestamp: new Date().toISOString() });
+  app.get('/api/health', (_req, res) => {
+    res.json({
+      status: 'healthy',
+      storage: isPrismaEnabled() ? 'postgres' : 'json',
+      gemini: isGeminiReady(),
+      timestamp: new Date().toISOString(),
+    });
   });
 
-  app.get('/api/channels', (req, res) => {
-    res.json(db.getChannels());
+  app.get('/api/channels', authMiddleware, (req: AuthenticatedRequest, res) => {
+    res.json(db.getChannelsForUser(req.user!.userId));
   });
 
-  app.get('/api/channels/:channelId/messages', (req, res) => {
+  app.get('/api/channels/:channelId/messages', authMiddleware, (req: AuthenticatedRequest, res) => {
+    if (!db.canAccessChannel(req.params.channelId, req.user!.userId)) {
+      return res.status(403).json({ error: 'You are not part of this conversation.' });
+    }
     res.json(db.getMessages(req.params.channelId));
   });
 
-  app.get('/api/users', (req, res) => {
-    res.json(db.getUsers());
+  // Public profiles only: credentials live in a separate store and never leave the server.
+  app.get('/api/users', authMiddleware, (_req, res) => {
+    res.json(buildPresenceList());
   });
 
-  // Initialize WebSockets (runs on the same port, upgrading HTTP -> WS)
+  app.use('/api', (req, res) => {
+    res.status(404).json({ error: `No API route for ${req.method} ${req.originalUrl}` });
+  });
+
   initSockets(server);
 
-  // Dev server / Production server integration
   if (process.env.NODE_ENV !== 'production') {
-    console.log('Mounting Vite dev middleware...');
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
-    });
+    const { createServer: createViteServer } = await import('vite');
+    const vite = await createViteServer({ server: { middlewareMode: true, hmr: { server } }, appType: 'spa' });
     app.use(vite.middlewares);
   } else {
-    console.log('Serving production build from dist/');
-    const distPath = path.join(__dirname, 'dist');
+    // Run `npm start` from the project root; Vite writes the client build to ./dist.
+    const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
+    app.get('*', (_req, res) => res.sendFile(path.join(distPath, 'index.html')));
   }
 
   server.listen(PORT, '0.0.0.0', () => {
-    console.log(`[DevPulse Server] running on http://0.0.0.0:${PORT}`);
+    console.log(`[DevPulse] http://localhost:${PORT}`);
   });
 }
 
 startServer().catch((err) => {
   console.error('Fatal error launching DevPulse server:', err);
+  process.exit(1);
 });
