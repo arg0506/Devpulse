@@ -2,167 +2,76 @@ import { Router, Response } from 'express';
 import { db } from '../db';
 import prisma, { isPrismaEnabled } from '../prismaClient';
 import { authMiddleware, AuthenticatedRequest } from '../middleware/auth';
+import { getIO } from '../realtime';
 
 const router = Router();
 
-// GET all technical events
-router.get('/', async (req: AuthenticatedRequest, res: Response) => {
-  if (!isPrismaEnabled()) {
-    return res.json(db.getEvents());
-  }
-  try {
-    // Attempt Prisma fetch
-    const prismaEvents = await prisma.event.findMany({
-      include: {
-        rsvps: {
-          include: {
-            user: {
-              select: { username: true }
-            }
-          }
-        },
-        creator: {
-          select: { username: true }
-        }
-      }
-    });
+function mirror(task: () => Promise<unknown>) {
+  if (!isPrismaEnabled()) return;
+  task().catch((err) => console.warn('[events] Postgres mirror failed:', err.message));
+}
 
-    const formatted = prismaEvents.map(e => ({
-      id: e.id,
-      title: e.title,
-      description: e.description || '',
-      date: e.date.toISOString(),
-      meetLink: e.meetLink || '',
-      creator: e.creator.username,
-      communityId: e.communityId || 'comm-global',
-      rsvps: e.rsvps.map(r => r.user.username)
-    }));
-
-    return res.json(formatted);
-  } catch (error) {
-    console.warn('[Prisma Warning] Failed to get events from SQL DB, falling back to JSON storage:', error);
-    return res.json(db.getEvents());
-  }
+router.get('/', (_req, res) => {
+  res.json(db.getEvents());
 });
 
-// POST create a technical event
-router.post('/', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const { title, description, date, meetLink, communityId } = req.body;
-    if (!title || !date) {
-      return res.status(400).json({ error: 'Title and date are required' });
-    }
-    const userId = req.user?.userId || 'unknown';
-    const username = req.user?.username || 'unknown';
-
-    if (!isPrismaEnabled()) {
-      const jsonEvt = db.createEvent(title, description || '', date, meetLink || '', username, communityId || 'comm-global');
-      return res.status(201).json(jsonEvt);
-    }
-
-    try {
-      const parsedDate = new Date(date);
-      const newEvent = await prisma.event.create({
-        data: {
-          title,
-          description: description || '',
-          date: parsedDate,
-          meetLink: meetLink || '',
-          communityId: communityId || null,
-          creatorId: userId,
-          rsvps: {
-            create: {
-              userId
-            }
-          }
-        },
-        include: {
-          creator: {
-            select: { username: true }
-          }
-        }
-      });
-
-      const formatted = {
-        id: newEvent.id,
-        title: newEvent.title,
-        description: newEvent.description || '',
-        date: newEvent.date.toISOString(),
-        meetLink: newEvent.meetLink || '',
-        creator: newEvent.creator.username,
-        communityId: newEvent.communityId || 'comm-global',
-        rsvps: [newEvent.creator.username]
-      };
-
-      // Sync to JSON DB
-      db.createEvent(title, description || '', date, meetLink || '', username, communityId || 'comm-global');
-
-      return res.status(201).json(formatted);
-    } catch (dbErr) {
-      console.warn('[Prisma Warning] Failed to create event in SQL DB, using JSON storage:', dbErr);
-      const jsonEvt = db.createEvent(title, description || '', date, meetLink || '', username, communityId || 'comm-global');
-      return res.status(201).json(jsonEvt);
-    }
-  } catch (error: any) {
-    console.error('Create Event error:', error);
-    return res.status(500).json({ error: 'Internal Server Error' });
+router.post('/', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+  const { title, description, date, meetLink, communityId } = req.body || {};
+  if (!title || !String(title).trim()) return res.status(400).json({ error: 'Give the event a title.' });
+  const parsed = Date.parse(date);
+  if (Number.isNaN(parsed)) return res.status(400).json({ error: 'Pick a date and time for the event.' });
+  if (meetLink && !/^https?:\/\//i.test(meetLink)) {
+    return res.status(400).json({ error: 'Meeting links must start with http:// or https://.' });
   }
+
+  const event = db.createEvent({
+    title: String(title).trim().slice(0, 80),
+    description: String(description || '').trim().slice(0, 500),
+    date: new Date(parsed).toISOString(),
+    meetLink: String(meetLink || '').trim(),
+    creator: req.user!.username,
+    communityId: communityId || 'comm-global',
+  });
+  getIO()?.emit('event:new', event);
+
+  const userId = req.user!.userId;
+  mirror(() =>
+    prisma.event.create({
+      data: {
+        id: event.id,
+        title: event.title,
+        description: event.description,
+        date: new Date(event.date),
+        meetLink: event.meetLink,
+        creatorId: userId,
+        rsvps: { create: { userId } },
+      },
+    }),
+  );
+
+  return res.status(201).json(event);
 });
 
-// POST toggle RSVP for an event
-router.post('/:id/rsvp', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const { id } = req.params;
-    const userId = req.user?.userId || 'unknown';
-    const username = req.user?.username || 'unknown';
+router.post('/:id/rsvp', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+  const event = db.toggleRSVP(req.params.id, req.user!.username);
+  if (!event) return res.status(404).json({ error: 'That event no longer exists.' });
+  getIO()?.emit('event:rsvp-update', { eventId: event.id, rsvps: event.rsvps });
 
-    if (!isPrismaEnabled()) {
-      db.toggleRSVP(id, username);
-      return res.json({ message: 'RSVP status updated successfully' });
-    }
-
-    try {
-      // Toggle registration in Prisma SQL DB
-      const existingRsvp = await prisma.eventRSVP.findUnique({
-        where: {
-          userId_eventId: {
-            userId,
-            eventId: id
-          }
-        }
+  const userId = req.user!.userId;
+  const going = event.rsvps.includes(req.user!.username);
+  mirror(async () => {
+    if (going) {
+      await prisma.eventRSVP.upsert({
+        where: { userId_eventId: { userId, eventId: event.id } },
+        update: {},
+        create: { userId, eventId: event.id },
       });
-
-      if (existingRsvp) {
-        await prisma.eventRSVP.delete({
-          where: {
-            userId_eventId: {
-              userId,
-              eventId: id
-            }
-          }
-        });
-      } else {
-        await prisma.eventRSVP.create({
-          data: {
-            userId,
-            eventId: id
-          }
-        });
-      }
-
-      // Sync to JSON DB
-      db.toggleRSVP(id, username);
-
-      return res.json({ message: 'RSVP status updated successfully' });
-    } catch (dbErr) {
-      console.warn('[Prisma Warning] Failed to update RSVP in SQL DB, using JSON storage:', dbErr);
-      db.toggleRSVP(id, username);
-      return res.json({ message: 'RSVP status updated successfully (local backup)' });
+    } else {
+      await prisma.eventRSVP.deleteMany({ where: { userId, eventId: event.id } });
     }
-  } catch (error: any) {
-    console.error('Toggle RSVP error:', error);
-    return res.status(500).json({ error: 'Internal Server Error' });
-  }
+  });
+
+  return res.json(event);
 });
 
 export default router;

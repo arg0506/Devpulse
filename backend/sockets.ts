@@ -1,452 +1,312 @@
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import { Server as HTTPServer } from 'http';
-import { db } from './db';
-import { GoogleGenAI } from '@google/genai';
-import { DevUser, DevMessage, ThreadReply, WhiteboardElement } from '../frontend/types';
+import { db, BOT_IDS } from './db';
+import { verifyToken } from './middleware/auth';
+import { generateText, isGeminiReady, GEMINI_MODEL } from './gemini';
+import { setIO, connectionCounts, broadcastPresence } from './realtime';
+import { DevMessage, DevUser, ThreadReply, WhiteboardElement, CodeSnippet } from '../frontend/types';
 import prisma, { isPrismaEnabled } from './prismaClient';
 
-// Safe lazy initialization of GoogleGenAI
-const apiKey = process.env.GEMINI_API_KEY;
-let ai: GoogleGenAI | null = null;
-if (apiKey && apiKey !== "MY_GEMINI_API_KEY") {
-  try {
-    ai = new GoogleGenAI({
-      apiKey,
-      httpOptions: {
-        headers: {
-          'User-Agent': 'aistudio-build',
-        }
-      }
+const MAX_MESSAGE_LENGTH = 8000;
+
+/** Spots fenced or obviously code-shaped text so Postgres rows carry a language hint. */
+export function detectCodeBlock(text: string): { isCodeBlock: boolean; language: string } {
+  const fenced = text.match(/```(\w+)?\n[\s\S]*?```/);
+  if (fenced) return { isCodeBlock: true, language: fenced[1] || 'plaintext' };
+  if (text.split('\n').length < 3) return { isCodeBlock: false, language: 'plaintext' };
+  const lower = text.toLowerCase();
+  const looksLikeCode = /(const|let)\s+\w+\s*=|function\s+\w+\s*\(|import\s+.*from|def\s+\w+\(|fn\s+\w+\(|select\s+.+\s+from/i.test(text);
+  if (!looksLikeCode) return { isCodeBlock: false, language: 'plaintext' };
+  let language = 'javascript';
+  if (lower.includes('select ') || lower.includes('insert into')) language = 'sql';
+  else if (lower.includes('def ')) language = 'python';
+  else if (lower.includes('fn ') || lower.includes('let mut')) language = 'rust';
+  else if (lower.includes('interface ') || lower.includes(': string')) language = 'typescript';
+  return { isCodeBlock: true, language };
+}
+
+// ---------- Postgres mirroring (best effort) ----------
+async function ensurePrismaUser(userId: string, username: string) {
+  const existing = await prisma.user.findUnique({ where: { id: userId } });
+  if (existing) return existing;
+  return prisma.user.create({
+    data: {
+      id: userId,
+      email: `${userId}@devpulse.local`,
+      // Not a usable hash: placeholder accounts for bots cannot sign in.
+      password: '!',
+      username: `${username}_${userId.slice(-4)}`,
+      techTags: [],
+    },
+  });
+}
+
+async function ensurePrismaChannel(channelId: string) {
+  const existing = await prisma.channel.findUnique({ where: { id: channelId } });
+  if (existing) return existing;
+  let community = await prisma.community.findFirst();
+  if (!community) {
+    community = await prisma.community.create({
+      data: { id: 'comm-global', name: 'Global Workspace', description: 'Default community', ownerId: 'system-bot' },
     });
-    console.log('Gemini AI initialized on backend.');
-  } catch (err) {
-    console.error('Failed to initialize Gemini AI SDK:', err);
   }
+  return prisma.channel.create({ data: { id: channelId, name: channelId, communityId: community.id } });
 }
 
-// Track connected socket users mapping socketId -> User ID
-const activeSockets = new Map<string, { userId: string; channelId?: string; room?: string }>();
-
-// Smart helper function to detect code block and identify programming language
-function detectCodeBlock(text: string): { isCodeBlock: boolean; language: string } {
-  const codeBlockRegex = /```(\w+)?\n([\s\S]*?)```/;
-  const match = text.match(codeBlockRegex);
-  if (match) {
-    return {
-      isCodeBlock: true,
-      language: match[1] || 'plaintext'
-    };
-  }
-
-  // Common keywords matching code indicators
-  const codeIndicators = [
-    /const\s+\w+\s*=/i,
-    /let\s+\w+\s*=/i,
-    /function\s+\w+\s*\(/i,
-    /import\s+.*\s+from/i,
-    /class\s+\w+/i,
-    /def\s+\w+\s*\(.*\):/i,
-    /fn\s+\w+\s*\(.*\)/i,
-    /pub\s+fn/i,
-    /struct\s+\w+/i,
-    /select\s+.*\s+from/i,
-    /insert\s+into/i,
-    /update\s+.*\s+set/i,
-    /<\/?[a-z][\s\S]*>/i, // HTML
-  ];
-
-  const lines = text.split('\n');
-  if (lines.length >= 3) {
-    let matchesCount = 0;
-    for (const indicator of codeIndicators) {
-      if (indicator.test(text)) {
-        matchesCount++;
-      }
-    }
-    const semicolonCount = (text.match(/;/g) || []).length;
-    const curlyBraceCount = (text.match(/\{[\s\S]*\}/g) || []).length;
-
-    if (matchesCount >= 1 || semicolonCount >= 3 || curlyBraceCount >= 1) {
-      let language = 'javascript';
-      if (text.toLowerCase().includes('select ') || text.toLowerCase().includes('insert ')) language = 'sql';
-      else if (text.toLowerCase().includes('def ') || text.toLowerCase().includes('import os')) language = 'python';
-      else if (text.toLowerCase().includes('fn ') || text.toLowerCase().includes('let mut')) language = 'rust';
-      else if (text.toLowerCase().includes('<html>') || text.toLowerCase().includes('<div>')) language = 'html';
-      else if (text.toLowerCase().includes('import react') || text.toLowerCase().includes('interface ')) language = 'typescript';
-      return { isCodeBlock: true, language };
-    }
-  }
-
-  return { isCodeBlock: false, language: 'plaintext' };
-}
-
-// Resilient helper to guarantee user exists in PostgreSQL
-async function ensureUserExists(userId: string, username: string) {
-  if (!isPrismaEnabled()) return null;
-  try {
-    const cleanId = userId || `dev-${Date.now()}`;
-    const cleanUsername = (username || 'developer').toLowerCase().replace(/\s+/g, '_');
-    const email = `${cleanUsername}@devpulse.local`;
-
-    const existing = await prisma.user.findUnique({ where: { id: cleanId } });
-    if (existing) {
-      return existing;
-    }
-
-    // Attempt to insert
-    return await prisma.user.create({
+function mirrorMessage(msg: DevMessage) {
+  if (!isPrismaEnabled()) return;
+  const { isCodeBlock, language } = detectCodeBlock(msg.text);
+  (async () => {
+    await ensurePrismaUser(msg.userId, msg.username);
+    await ensurePrismaChannel(msg.channelId);
+    await prisma.message.create({
       data: {
-        id: cleanId,
-        email,
-        password: '$2a$10$placeholderhashedpasswordforonlineusersdontauthwiththis',
-        username: cleanUsername,
-        bio: 'Connected developer on DevPulse Real-Time Uplink',
-        techTags: ['TypeScript', 'Node.js']
-      }
+        id: msg.id,
+        text: msg.codeSnippet ? `${msg.text}\n\n${msg.codeSnippet.code}` : msg.text,
+        senderId: msg.userId,
+        channelId: msg.channelId,
+        isCodeBlock: isCodeBlock || !!msg.codeSnippet,
+        language: msg.codeSnippet?.language || language,
+        createdAt: new Date(msg.timestamp),
+      },
     });
-  } catch (error) {
-    console.warn('[Prisma] User setup bypassed (Database might be unprovisioned yet):', error);
-    return null;
-  }
+  })().catch((err) => console.warn('[sockets] Postgres mirror failed:', err.message));
 }
 
-// Resilient helper to guarantee channel exists in PostgreSQL
-async function ensureChannelExists(channelId: string) {
-  if (!isPrismaEnabled()) return null;
-  try {
-    const existing = await prisma.channel.findUnique({ where: { id: channelId } });
-    if (existing) {
-      return existing;
-    }
-
-    // Guarantee default community
-    let community = await prisma.community.findFirst();
-    if (!community) {
-      community = await prisma.community.create({
-        data: {
-          id: 'devpulse-community',
-          name: 'DevPulse Global Workspace',
-          description: 'The general workspace for real-time collaboration',
-          ownerId: 'system-bot'
-        }
-      });
-    }
-
-    return await prisma.channel.create({
-      data: {
-        id: channelId,
-        name: channelId,
-        communityId: community.id
-      }
-    });
-  } catch (error) {
-    console.warn('[Prisma] Channel setup bypassed (Database might be unprovisioned yet):', error);
-    return null;
-  }
+// ---------- Helpers ----------
+function newId(prefix: string) {
+  return `${prefix}-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
 }
+
+function messageFrom(user: DevUser, channelId: string, text: string, codeSnippet?: CodeSnippet): DevMessage {
+  return {
+    id: newId('msg'),
+    channelId,
+    userId: user.id,
+    username: user.username,
+    role: user.role,
+    avatarEmoji: user.avatarEmoji,
+    text,
+    timestamp: new Date().toISOString(),
+    repliesCount: 0,
+    reactions: [],
+    ...(codeSnippet ? { codeSnippet } : {}),
+  };
+}
+
+function sanitiseSnippet(raw: any): CodeSnippet | undefined {
+  if (!raw || typeof raw.code !== 'string' || !raw.code.trim()) return undefined;
+  return {
+    code: raw.code.slice(0, 20000),
+    language: String(raw.language || 'plaintext').slice(0, 20),
+    title: String(raw.title || 'snippet').slice(0, 80),
+  };
+}
+
+/** Terminal colour markup: [[name]text] where name is a theme token (accent, ok, warn, err, muted). */
+const c = (tone: 'accent' | 'ok' | 'warn' | 'err' | 'muted', text: string | number) => `[[${tone}]${text}]`;
 
 export function initSockets(server: HTTPServer) {
-  const io = new SocketIOServer(server, {
-    cors: {
-      origin: '*',
-      methods: ['GET', 'POST']
-    }
+  const io = new SocketIOServer(server, { cors: { origin: process.env.FRONTEND_URL || '*' } });
+  setIO(io);
+
+  // Every socket must present a valid session token.
+  io.use((socket, next) => {
+    const payload = verifyToken(socket.handshake.auth?.token);
+    if (!payload) return next(new Error('unauthorized'));
+    const user = db.getUser(payload.userId);
+    if (!user) return next(new Error('unauthorized'));
+    socket.data.userId = payload.userId;
+    next();
   });
 
+  /** Posts a message and notifies everyone who should see it. */
+  function publish(msg: DevMessage) {
+    db.addMessage(msg);
+    io.to(`channel:${msg.channelId}`).emit('message:new', msg);
+    const channel = db.getChannel(msg.channelId);
+    if (channel?.category === 'Direct Messages') {
+      (channel.members || []).forEach((id) => io.to(`user:${id}`).emit('channel:activity', { channelId: msg.channelId, messageId: msg.id, userId: msg.userId }));
+    } else {
+      io.emit('channel:activity', { channelId: msg.channelId, messageId: msg.id, userId: msg.userId });
+    }
+  }
+
+  async function replyAsGemini(trigger: DevMessage, author: DevUser) {
+    const channelId = trigger.channelId;
+    io.to(`channel:${channelId}`).emit('typing:start', { userId: 'gemini-bot', username: 'gemini', channelId });
+    try {
+      let text: string;
+      if (!isGeminiReady()) {
+        text = 'I am offline right now. Add `GEMINI_API_KEY` to the server `.env` file and restart to talk to me.';
+      } else {
+        const history = db
+          .getMessages(channelId, 12)
+          .filter((m) => m.id !== trigger.id)
+          .map((m) => `@${m.username}: ${m.text}${m.codeSnippet ? `\n${m.codeSnippet.code}` : ''}`)
+          .join('\n');
+        text = await generateText(
+          `Recent conversation in #${channelId}:\n${history || '(none)'}\n\n@${author.username} (${author.role}) asks:\n${trigger.text}${trigger.codeSnippet ? `\n\n\`\`\`${trigger.codeSnippet.language}\n${trigger.codeSnippet.code}\n\`\`\`` : ''}`,
+          {
+            systemInstruction:
+              'You are Gemini, an expert software engineer inside DevPulse, a developer chat app. Answer concisely in Markdown. Use fenced code blocks with a language tag for code. Do not repeat the question.',
+          },
+        );
+      }
+      const bot = db.getUser('gemini-bot')!;
+      publish({ ...messageFrom(bot, channelId, text || 'I had nothing to add there.'), isBot: true });
+    } catch (err: any) {
+      console.error('[gemini] reply failed:', err);
+      const bot = db.getUser('gemini-bot')!;
+      publish({ ...messageFrom(bot, channelId, `I hit an error talking to the model: ${err.message || err}`), isBot: true });
+    } finally {
+      io.to(`channel:${channelId}`).emit('typing:stop', { userId: 'gemini-bot', channelId });
+    }
+  }
+
   io.on('connection', (socket: Socket) => {
-    console.log('Socket connected:', socket.id);
+    const userId: string = socket.data.userId;
+    const me = () => db.getUser(userId)!;
+    let currentChannel: string | null = null;
 
-    // Send initial channel list immediately
-    socket.emit('init:channels', db.getChannels());
+    connectionCounts.set(userId, (connectionCounts.get(userId) || 0) + 1);
+    if (me().status === 'offline') db.updateUserStatus(userId, 'online');
+    socket.join(`user:${userId}`);
 
-    // Send whiteboard elements
+    socket.emit('init:channels', db.getChannelsForUser(userId));
     socket.emit('init:whiteboard', db.getWhiteboardElements());
+    broadcastPresence();
 
-    // ----------------------------------------------------
-    // SPECIFIED TARGET EVENT: join_room (For DMs & Chats)
-    // ----------------------------------------------------
-    socket.on('join_room', async ({ roomId, userId, username }: { roomId: string; userId: string; username: string }) => {
-      console.log(`[Socket] User ${username} (${userId}) requested to join room: ${roomId}`);
-      
-      socket.join(roomId);
-
-      const socketState = activeSockets.get(socket.id) || { userId };
-      socketState.room = roomId;
-      activeSockets.set(socket.id, socketState);
-
-      // Verify and sync schema records
-      await ensureUserExists(userId, username);
-      await ensureChannelExists(roomId);
-
-      socket.to(roomId).emit('user_joined_room', { userId, username, roomId });
-    });
-
-    // ----------------------------------------------------
-    // SPECIFIED TARGET EVENT: send_message (Dual PostgreSQL/InMemory + Code Detection)
-    // ----------------------------------------------------
-    socket.on('send_message', async (payload: { roomId: string; senderId: string; username: string; text: string }) => {
-      const { roomId, senderId, username, text } = payload;
-      console.log(`[Socket] Message from ${username} in room ${roomId}: "${text.substring(0, 30)}..."`);
-
-      // Detect if text looks like a code snippet
-      const { isCodeBlock, language } = detectCodeBlock(text);
-
-      // 1. Build message metadata
-      const messageId = `msg-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-      const timestamp = new Date().toISOString();
-
-      // Create fallback item for front-end
-      const frontendMsg: DevMessage = {
-        id: messageId,
-        channelId: roomId,
-        userId: senderId,
-        username,
-        role: 'Engineer',
-        avatarEmoji: '💻',
-        text,
-        timestamp,
-        repliesCount: 0,
-        reactions: [],
-        ...(isCodeBlock ? {
-          codeSnippet: {
-            code: text,
-            language,
-            title: 'console_paste'
-          }
-        } : {})
-      };
-
-      // 2. Persist to SQLite/JSON in-memory database as absolute fallback
-      db.addMessage(frontendMsg);
-
-      // 3. Persist to PostgreSQL via Prisma Client
-      if (isPrismaEnabled()) {
-        try {
-          await ensureUserExists(senderId, username);
-          await ensureChannelExists(roomId);
-
-          await prisma.message.create({
-            data: {
-              id: messageId,
-              text,
-              senderId,
-              channelId: roomId,
-              isCodeBlock,
-              language,
-              createdAt: new Date(timestamp)
-            }
-          });
-          console.log('[Prisma] Message persisted to PostgreSQL successfully.');
-        } catch (err: any) {
-          console.warn('[Prisma] Failed to write message to PostgreSQL:', err.message);
-        }
+    // ---------- Channels ----------
+    socket.on('user:join-channel', ({ channelId }: { channelId: string }) => {
+      if (!channelId || !db.canAccessChannel(channelId, userId)) return;
+      if (currentChannel) {
+        socket.leave(`channel:${currentChannel}`);
+        socket.to(`channel:${currentChannel}`).emit('typing:stop', { userId, channelId: currentChannel });
       }
-
-      // 4. Broadcast message to all subscribers of the room
-      io.to(roomId).emit('receive_message', frontendMsg);
-      io.to(roomId).emit('message:new', frontendMsg);
+      currentChannel = channelId;
+      socket.join(`channel:${channelId}`);
+      socket.emit('init:messages', { channelId, messages: db.getMessages(channelId) });
     });
 
-    // Handle User Login/Init
-    socket.on('user:init', async (user: DevUser) => {
-      // Register or update user in database
-      const savedUser = db.saveUser({
-        ...user,
-        status: 'online'
+    socket.on('channel:create', (input: { name: string; description?: string; category?: 'Channels' | 'Guilds' }, ack?: (c: any) => void) => {
+      const name = String(input?.name || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 32);
+      if (name.length < 2) return ack?.({ error: 'Channel names need at least 2 letters or numbers.' });
+      const created = db.createChannel({
+        name,
+        description: String(input?.description || '').slice(0, 140),
+        category: input?.category === 'Guilds' ? 'Guilds' : 'Channels',
       });
-      
-      activeSockets.set(socket.id, { userId: savedUser.id });
-      
-      // Join general as default channel
-      socket.join('channel:general');
-      activeSockets.get(socket.id)!.channelId = 'general';
-
-      // Ensure user and channel exist in PostgreSQL
-      await ensureUserExists(savedUser.id, savedUser.username);
-      await ensureChannelExists('general');
-
-      // Broadcast updated user presence to all clients
-      broadcastPresence(io);
-
-      // Send current messages for general channel to this user
-      socket.emit('init:messages', db.getMessages('general'));
-      
-      // Let other users know
-      socket.to('channel:general').emit('notification:user-joined', {
-        username: savedUser.username,
-        avatarEmoji: savedUser.avatarEmoji
-      });
-    });
-
-    // Handle profile/status updates
-    socket.on('user:update-profile', (updatedUser: DevUser) => {
-      db.saveUser(updatedUser);
-      broadcastPresence(io);
-    });
-
-    // Handle joining a channel
-    socket.on('user:join-channel', async ({ userId, channelId }: { userId: string; channelId: string }) => {
-      const socketState = activeSockets.get(socket.id);
-      if (socketState) {
-        if (socketState.channelId) {
-          socket.leave(`channel:${socketState.channelId}`);
-          socket.to(`channel:${socketState.channelId}`).emit('typing:stop', { userId });
-        }
-        
-        socketState.channelId = channelId;
-        socket.join(`channel:${channelId}`);
-        
-        // Ensure channel exists in SQL
-        await ensureChannelExists(channelId);
-
-        // Fetch and send message history for new channel
-        socket.emit('init:messages', db.getMessages(channelId));
-      }
-    });
-
-    // Handle channel creation
-    socket.on('channel:create', (newChan: { name: string; description: string; category: 'Channels' | 'Guilds' | 'Direct Messages' }) => {
-      const created = db.createChannel(newChan);
       io.emit('channel:new', created);
+      ack?.({ channel: created });
     });
 
-    // Handle typing status
-    socket.on('typing:start', ({ userId, username, channelId }: { userId: string; username: string; channelId: string }) => {
-      socket.to(`channel:${channelId}`).emit('typing:start', { userId, username });
+    socket.on('dm:open', ({ userId: otherId }: { userId: string }, ack?: (c: any) => void) => {
+      if (!otherId || otherId === userId || !db.getUser(otherId)) return ack?.({ error: 'That person is not on DevPulse.' });
+      const channel = db.openDirectMessage(userId, otherId);
+      io.to(`user:${userId}`).to(`user:${otherId}`).emit('channel:new', channel);
+      ack?.({ channel });
     });
 
-    socket.on('typing:stop', ({ userId, channelId }: { userId: string; channelId: string }) => {
-      socket.to(`channel:${channelId}`).emit('typing:stop', { userId });
+    socket.on('event:open-channel', ({ eventId }: { eventId: string }, ack?: (c: any) => void) => {
+      const evt = db.getEvent(eventId);
+      if (!evt) return ack?.({ error: 'That event no longer exists.' });
+      const channel = db.createChannel({ id: `event-${evt.id}`, name: evt.title, description: `Discussion for ${evt.title}`, category: 'Events' });
+      ack?.({ channel });
     });
 
-    // Handle sending a message (Legacy UI route)
-    socket.on('message:send', async (msgData: DevMessage) => {
-      const savedMsg = db.addMessage(msgData);
-      
-      // Broadcast to all in the channel
-      io.to(`channel:${msgData.channelId}`).emit('message:new', savedMsg);
-
-      // Increment XP for sending message
-      db.incrementXp(msgData.userId, 5);
-      broadcastPresence(io);
-
-      // Persist to PostgreSQL via Prisma
-      if (isPrismaEnabled()) {
-        try {
-          await ensureUserExists(msgData.userId, msgData.username);
-          if (msgData.channelId) {
-            await ensureChannelExists(msgData.channelId);
-          }
-
-          const { isCodeBlock, language } = detectCodeBlock(msgData.text);
-
-          await prisma.message.create({
-            data: {
-              id: msgData.id,
-              text: msgData.text,
-              senderId: msgData.userId,
-              channelId: msgData.channelId,
-              isCodeBlock: isCodeBlock || !!msgData.codeSnippet,
-              language: language || msgData.codeSnippet?.language || 'plaintext',
-              createdAt: new Date(msgData.timestamp)
-            }
-          });
-        } catch (err: any) {
-          console.warn('[Prisma] Failed to write message send to SQL:', err.message);
-        }
-      }
-
-      // --- Trigger Gemini Assistant if triggered ---
-      const textLower = msgData.text.toLowerCase();
-      const isAiLounge = msgData.channelId === 'ai-lounge';
-      const mentionsGemini = textLower.includes('@gemini') || textLower.includes('gemini');
-
-      if ((isAiLounge || mentionsGemini) && msgData.userId !== 'system-bot' && msgData.userId !== 'gemini-bot') {
-        io.to(`channel:${msgData.channelId}`).emit('typing:start', { userId: 'gemini-bot', username: 'Gemini AI Buddy' });
-
-        try {
-          let aiResponseText = "I would love to help, but my API key is not configured in this workspace yet. You can set it in Settings > Secrets!";
-          
-          if (ai) {
-            const prompt = `You are "Gemini AI Buddy", an expert software engineering teammate inside a developer chat app called DevPulse. 
-You are responding to a user named ${msgData.username} who has the role: ${msgData.role}.
-The user says: "${msgData.text}"
-
-Please provide a helpful, concise, markdown-formatted, developer-friendly response. 
-If they ask for code, provide a beautiful snippet with correct language syntax highlighting. Keep it extremely precise and elegant.`;
-
-            const result = await ai.models.generateContent({
-              model: 'gemini-3.5-flash',
-              contents: prompt
-            });
-            aiResponseText = result.text || "I processed that, but had no output.";
-          } else {
-            if (msgData.text.includes('hello') || msgData.text.includes('hi')) {
-              aiResponseText = "Hey there! 👋 I am **Gemini AI Buddy**, your coding assistant. Send me questions, ask me to explain algorithms, refit React hooks, or debug database queries right here! (To enable live responses, make sure your `GEMINI_API_KEY` is configured)";
-            }
-          }
-
-          setTimeout(() => {
-            const aiMsg: DevMessage = {
-              id: `ai-${Date.now()}`,
-              channelId: msgData.channelId,
-              userId: 'gemini-bot',
-              username: 'Gemini AI Buddy',
-              role: 'AI Pair Partner',
-              avatarEmoji: '🤖',
-              text: aiResponseText,
-              timestamp: new Date().toISOString(),
-              repliesCount: 0,
-              reactions: []
-            };
-            db.addMessage(aiMsg);
-            io.to(`channel:${msgData.channelId}`).emit('message:new', aiMsg);
-            io.to(`channel:${msgData.channelId}`).emit('typing:stop', { userId: 'gemini-bot' });
-          }, 1500);
-
-        } catch (err) {
-          console.error('Gemini error:', err);
-          io.to(`channel:${msgData.channelId}`).emit('typing:stop', { userId: 'gemini-bot' });
-        }
-      }
+    // ---------- Typing ----------
+    socket.on('typing:start', ({ channelId }: { channelId: string }) => {
+      socket.to(`channel:${channelId}`).emit('typing:start', { userId, username: me().username, channelId });
+    });
+    socket.on('typing:stop', ({ channelId }: { channelId: string }) => {
+      socket.to(`channel:${channelId}`).emit('typing:stop', { userId, channelId });
     });
 
-    // Reactions
-    socket.on('message:react', ({ messageId, emoji, userId, channelId }: { messageId: string; emoji: string; userId: string; channelId: string }) => {
-      const updatedMsg = db.addReaction(messageId, emoji, userId);
-      if (updatedMsg) {
-        io.to(`channel:${channelId}`).emit('message:update', updatedMsg);
-      }
+    // ---------- Messages ----------
+    socket.on('message:send', (input: { channelId: string; text: string; codeSnippet?: CodeSnippet }) => {
+      const channelId = String(input?.channelId || '');
+      const text = String(input?.text || '').trim().slice(0, MAX_MESSAGE_LENGTH);
+      const snippet = sanitiseSnippet(input?.codeSnippet);
+      if (!channelId || (!text && !snippet) || !db.canAccessChannel(channelId, userId)) return;
+      if (!db.getChannel(channelId)) return;
+
+      const author = me();
+      const msg = messageFrom(author, channelId, text, snippet);
+      publish(msg);
+      mirrorMessage(msg);
+      db.incrementXp(userId, 5);
+      broadcastPresence();
+
+      const asksGemini = /(^|\s)@gemini\b/i.test(text) || channelId === 'ai-lounge';
+      if (asksGemini && !channelId.startsWith('dm:')) void replyAsGemini(msg, author);
     });
 
-    socket.on('message:unreact', ({ messageId, emoji, userId, channelId }: { messageId: string; emoji: string; userId: string; channelId: string }) => {
-      const updatedMsg = db.removeReaction(messageId, emoji, userId);
-      if (updatedMsg) {
-        io.to(`channel:${channelId}`).emit('message:update', updatedMsg);
-      }
+    socket.on('message:delete', ({ messageId }: { messageId: string }) => {
+      const msg = db.getMessage(messageId);
+      if (!msg || msg.userId !== userId) return;
+      db.deleteMessage(messageId);
+      io.to(`channel:${msg.channelId}`).emit('message:deleted', { messageId, channelId: msg.channelId });
     });
 
-    // Thread replies
+    socket.on('message:react', ({ messageId, emoji }: { messageId: string; emoji: string }) => {
+      if (!emoji || String(emoji).length > 8) return;
+      const msg = db.getMessage(messageId);
+      if (!msg || !db.canAccessChannel(msg.channelId, userId)) return;
+      const updated = db.toggleReaction(messageId, emoji, userId);
+      if (updated) io.to(`channel:${updated.channelId}`).emit('message:update', updated);
+    });
+
+    socket.on('message:pin', ({ messageId }: { messageId: string }) => {
+      const msg = db.getMessage(messageId);
+      if (!msg || !db.canAccessChannel(msg.channelId, userId)) return;
+      const updated = db.togglePin(messageId);
+      if (updated) io.to(`channel:${updated.channelId}`).emit('message:update', updated);
+    });
+
+    // ---------- Threads ----------
     socket.on('thread:get-replies', (messageId: string) => {
-      socket.emit('thread:replies-list', {
+      const msg = db.getMessage(messageId);
+      if (!msg || !db.canAccessChannel(msg.channelId, userId)) return;
+      socket.emit('thread:replies-list', { messageId, replies: db.getThreadReplies(messageId) });
+    });
+
+    socket.on('thread:send-reply', ({ messageId, text }: { messageId: string; text: string }) => {
+      const parent = db.getMessage(messageId);
+      const body = String(text || '').trim().slice(0, MAX_MESSAGE_LENGTH);
+      if (!parent || !body || !db.canAccessChannel(parent.channelId, userId)) return;
+      const author = me();
+      const reply: ThreadReply = {
+        id: newId('reply'),
         messageId,
-        replies: db.getThreadReplies(messageId)
-      });
+        userId,
+        username: author.username,
+        role: author.role,
+        avatarEmoji: author.avatarEmoji,
+        text: body,
+        timestamp: new Date().toISOString(),
+      };
+      db.addThreadReply(reply);
+      io.to(`channel:${parent.channelId}`).emit('thread:reply-new', reply);
+      io.to(`channel:${parent.channelId}`).emit('message:update', db.getMessage(messageId));
     });
 
-    socket.on('thread:send-reply', (reply: ThreadReply) => {
-      const savedReply = db.addThreadReply(reply);
-      io.emit('thread:reply-new', savedReply);
-      
-      const updatedMsg = db.getMessage(reply.messageId);
-      if (updatedMsg) {
-        io.to(`channel:${updatedMsg.channelId}`).emit('message:update', updatedMsg);
-      }
+    // ---------- Whiteboard ----------
+    socket.on('whiteboard:get-state', () => {
+      socket.emit('init:whiteboard', db.getWhiteboardElements());
     });
 
-    // Whiteboard Canvas Collaboration
     socket.on('whiteboard:draw', (elem: WhiteboardElement) => {
-      const saved = db.saveWhiteboardElement(elem);
+      if (!elem?.id || !elem.type) return;
+      const author = me();
+      const existing = db.getWhiteboardElements().find((e) => e.id === elem.id);
+      const saved = db.saveWhiteboardElement({
+        ...elem,
+        text: elem.text ? String(elem.text).slice(0, 500) : undefined,
+        points: Array.isArray(elem.points) ? elem.points.slice(0, 4000) : undefined,
+        createdBy: existing?.createdBy || userId,
+        username: existing?.username || author.username,
+      });
       socket.broadcast.emit('whiteboard:drawn', saved);
     });
 
@@ -460,163 +320,114 @@ If they ask for code, provide a beautiful snippet with correct language syntax h
       io.emit('whiteboard:cleared');
     });
 
-    // Real-Time Communities & Events Synchronization
-    socket.on('event:rsvp-update', ({ eventId, rsvps, username }: { eventId: string; rsvps: string[]; username: string }) => {
-      console.log(`[Socket] RSVP updated for event ${eventId}. Active RSVPs:`, rsvps);
-      // Broadcast RSVP updates globally in real-time
-      io.emit('event:rsvp-update', { eventId, rsvps });
+    socket.on('whiteboard:cursor', ({ x, y }: { x: number; y: number }) => {
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+      socket.broadcast.emit('whiteboard:cursor', { userId, username: me().username, x, y });
     });
 
-    socket.on('community:create', (newComm: any) => {
-      console.log(`[Socket] Community created globally:`, newComm.name);
-      io.emit('community:new', newComm);
-    });
+    // ---------- Console ----------
+    socket.on('terminal:command', async ({ command }: { command: string }) => {
+      const raw = String(command || '').trim();
+      const [base = '', ...rest] = raw.split(/\s+/);
+      const arg = rest.join(' ');
+      const respond = (output: string, isError = false) => socket.emit('terminal:response', { output, isError });
 
-    socket.on('event:create', (newEvent: any) => {
-      console.log(`[Socket] Event created globally:`, newEvent.title);
-      io.emit('event:new', newEvent);
-    });
-
-    // Sandbox Terminal Commands
-    socket.on('terminal:command', async ({ command, userId, username }: { command: string; userId: string; username: string }) => {
-      const args = command.trim().split(' ');
-      const baseCmd = args[0].toLowerCase();
-      
-      let output = '';
-      let isError = false;
-
-      switch (baseCmd) {
+      switch (base.toLowerCase()) {
         case 'help':
-          output = `Available DevPulse Commands:
-  [[b;#58a6ff;]help]                     - List available console commands
-  [[b;#58a6ff;]users]                    - List all developers currently on the platform
-  [[b;#58a6ff;]git status]               - Mock Git repository and branch details
-  [[b;#58a6ff;]pulse-stats]              - Real-time community health and database telemetry
-  [[b;#58a6ff;]compile <language>]       - Run a simulated compilation pipeline
-  [[b;#58a6ff;]ai <prompt>]              - Query Gemini AI directly from your developer console
-  [[b;#58a6ff;]clear]                    - Clear terminal console history`;
+          respond(
+            [
+              'Commands',
+              `  ${c('accent', 'whoami')}          your profile, XP and streak`,
+              `  ${c('accent', 'users')}           who is online right now`,
+              `  ${c('accent', 'channels')}        every channel you can open`,
+              `  ${c('accent', 'events')}          upcoming events and RSVP counts`,
+              `  ${c('accent', 'stats')}           workspace and storage telemetry`,
+              `  ${c('accent', 'ai')} <prompt>     ask Gemini from the console`,
+              `  ${c('accent', 'echo')} <text>     print text`,
+              `  ${c('accent', 'date')}            server time`,
+              `  ${c('accent', 'clear')}           clear the console`,
+            ].join('\n'),
+          );
           break;
-
-        case 'users':
-          const activeUsers = db.getUsers().filter(u => u.status === 'online');
-          output = `Active Developer Sockets:\n` + activeUsers.map(u => {
-            return `  - ${u.avatarEmoji} [[b;#3fb950;]${u.username}] [${u.role}] - XP: ${u.xpPoints} - ${u.status.toUpperCase()}`;
-          }).join('\n');
+        case 'whoami': {
+          const u = me();
+          respond(`${u.avatarEmoji} ${c('accent', '@' + u.username)}  ${u.role}\n  plan ${c('ok', u.tier || 'Free')} · ${u.xpPoints} XP · ${u.streakCount}-day streak\n  skills ${u.skills.join(', ') || '—'}`);
           break;
-
-        case 'git':
-          if (args[1] === 'status') {
-            output = `On branch [[b;#58a6ff;]main]
-Your branch is up to date with 'origin/main'.
-
-Changes not staged for commit:
-  (use "git add <file>..." to update what will be committed)
-  (use "git restore <file>..." to discard changes in working directory)
-	[[b;#f85149;]modified:   backend/sockets.ts]
-	[[b;#f85149;]modified:   frontend/App.tsx]
-
-no changes added to commit (use "git add" and/or "git commit -a")`;
-          } else {
-            output = `git: command not found or unsupported. Try "git status"`;
-            isError = true;
+        }
+        case 'users': {
+          const online = db.getUsers().filter((u) => BOT_IDS.has(u.id) || (connectionCounts.get(u.id) || 0) > 0);
+          respond(`${online.length} online\n` + online.map((u) => `  ${u.avatarEmoji} ${c('ok', '@' + u.username)}  ${c('muted', u.role)}`).join('\n'));
+          break;
+        }
+        case 'channels': {
+          const list = db.getChannelsForUser(userId).filter((ch) => ch.category === 'Channels' || ch.category === 'Guilds');
+          respond(list.map((ch) => `  ${c('accent', '#' + ch.name)}  ${c('muted', `${db.getMessages(ch.id, 100000).length} msgs`)}  ${ch.description}`).join('\n'));
+          break;
+        }
+        case 'events': {
+          const upcoming = db.getEvents().filter((e) => Date.parse(e.date) > Date.now() - 3600000);
+          respond(
+            upcoming.length
+              ? upcoming.map((e) => `  ${c('warn', new Date(e.date).toUTCString().slice(0, 22))}  ${e.title}  ${c('muted', `${e.rsvps.length} going`)}`).join('\n')
+              : 'No upcoming events.',
+          );
+          break;
+        }
+        case 'stats':
+        case 'pulse-stats': {
+          const users = db.getUsers().filter((u) => !BOT_IDS.has(u.id));
+          const online = users.filter((u) => (connectionCounts.get(u.id) || 0) > 0).length;
+          respond(
+            [
+              `storage      ${c('accent', isPrismaEnabled() ? 'PostgreSQL (Prisma) + JSON' : 'JSON file')}`,
+              `ai           ${isGeminiReady() ? c('ok', GEMINI_MODEL) : c('err', 'offline')}`,
+              `developers   ${c('ok', online)} online / ${users.length} total`,
+              `channels     ${db.getChannels().filter((ch) => ch.category !== 'Direct Messages').length}`,
+              `board        ${db.getWhiteboardElements().length} shapes`,
+              `uptime       ${Math.round(process.uptime() / 60)} min`,
+            ].join('\n'),
+          );
+          break;
+        }
+        case 'echo':
+          respond(arg);
+          break;
+        case 'date':
+          respond(new Date().toString());
+          break;
+        case 'ai': {
+          if (!arg) return respond('Usage: ai <prompt>   e.g. ai write an Express route that streams a file', true);
+          if (!isGeminiReady()) return respond('Gemini is offline. Set GEMINI_API_KEY in .env and restart the server.', true);
+          socket.emit('terminal:response', { output: c('muted', 'asking gemini…'), isPending: true });
+          try {
+            const out = await generateText(arg, {
+              systemInstruction: 'You answer inside a monospace developer console. Be brief. Plain text, no Markdown headings.',
+            });
+            respond(out || '(empty response)');
+          } catch (err: any) {
+            respond(`Gemini error: ${err.message || err}`, true);
           }
           break;
-
-        case 'pulse-stats':
-          const allUsers = db.getUsers();
-          const chans = db.getChannels();
-          const whiteboardCount = db.getWhiteboardElements().length;
-          output = `[[b;#d854ff;]=== DEVPULSE PLATFORM TELEMETRY ===]
-Active DB Store:      [[b;#58a6ff;]Prisma + PostgreSQL / Fallback JSON]
-Online Engineers:     [[b;#3fb950;]${allUsers.filter(u => u.status === 'online').length} active / ${allUsers.length} total]
-Discussion Channels:  [[b;#3fb950;]${chans.length} active spaces]
-Canvas Elements:      [[b;#3fb950;]${whiteboardCount} collaborative drawing nodes]
-Streak Champion:      [[b;#58a6ff;]${allUsers.length > 0 ? allUsers.reduce((max, u) => u.streakCount > max.streakCount ? u : max, allUsers[0]).username : 'None'}]`;
-          break;
-
-        case 'compile':
-          const lang = args[1] || 'typescript';
-          output = `[[b;#eed812;]>>> Spinning up sandboxed virtual environments...]
-Compiling project pipeline for: [[b;#58a6ff;]${lang}]
-Analyzing dependency trees...
-Invoking Transpilers...
-Linking binaries...
-[[b;#3fb950;]Compilation successful!] 0 warnings, 0 errors. App served successfully.`;
-          break;
-
-        case 'ai':
-          const prompt = args.slice(1).join(' ');
-          if (!prompt) {
-            output = `Usage: ai <prompt> (e.g. ai "write an Express.js route to upload file")`;
-            isError = true;
-            break;
-          }
-          
-          socket.emit('terminal:response', {
-            output: `[[b;#eed812;]Connecting to Gemini LLM Agent...] Asking: "${prompt}"...`,
-            isPending: true
-          });
-
-          if (ai) {
-            try {
-              const res = await ai.models.generateContent({
-                model: 'gemini-3.5-flash',
-                contents: `You are a helpful sandbox terminal coding assistant in DevPulse. Please respond to the user query briefly and with formatting that looks amazing in a monospaced terminal environment. Here is their request: "${prompt}"`
-              });
-              output = res.text || "Empty response from AI.";
-            } catch (err: any) {
-              output = `AI error: ${err.message || err}`;
-              isError = true;
-            }
-          } else {
-            output = `Gemini AI capability is offline. Set process.env.GEMINI_API_KEY in Secrets panel to unlock sandbox AI!`;
-            isError = true;
-          }
-          break;
-
+        }
         case 'clear':
-          output = 'CLEAR_CONSOLE';
+          respond('CLEAR_CONSOLE');
           break;
-
+        case '':
+          break;
         default:
-          output = `sh: command not found: ${baseCmd}. Type "help" to see valid DevPulse platform controls.`;
-          isError = true;
+          respond(`${base}: command not found. Type ${c('accent', 'help')} for the list.`, true);
       }
-
-      socket.emit('terminal:response', { output, isError });
     });
 
-    // Handle disconnection
     socket.on('disconnect', () => {
-      console.log('Socket disconnected:', socket.id);
-      const socketState = activeSockets.get(socket.id);
-      if (socketState) {
-        db.updateUserStatus(socketState.userId, 'offline');
-        
-        // Notify others of room disconnect
-        if (socketState.room) {
-          socket.to(socketState.room).emit('user_left_room', { userId: socketState.userId });
-        }
-
-        activeSockets.delete(socket.id);
-        broadcastPresence(io);
+      const remaining = (connectionCounts.get(userId) || 1) - 1;
+      if (remaining <= 0) {
+        connectionCounts.delete(userId);
+        if (currentChannel) socket.to(`channel:${currentChannel}`).emit('typing:stop', { userId, channelId: currentChannel });
+      } else {
+        connectionCounts.set(userId, remaining);
       }
+      broadcastPresence();
     });
   });
-}
-
-function broadcastPresence(io: SocketIOServer) {
-  const activeIds = Array.from(activeSockets.values()).map(s => s.userId);
-  const allUsers = db.getUsers();
-  
-  const presenceList = allUsers.map(user => ({
-    userId: user.id,
-    username: user.username,
-    role: user.role,
-    avatarEmoji: user.avatarEmoji,
-    status: activeIds.includes(user.id) ? 'online' : 'offline',
-    customStatus: user.customStatus
-  }));
-
-  io.emit('presence:list', presenceList);
 }

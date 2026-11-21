@@ -1,283 +1,159 @@
-import { Router, Request, Response } from 'express';
+import { Router, Response } from 'express';
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
 import prisma, { isPrismaEnabled } from '../prismaClient';
-import { authMiddleware, AuthenticatedRequest } from '../middleware/auth';
+import { authMiddleware, AuthenticatedRequest, signToken } from '../middleware/auth';
 import { db } from '../db';
 import { DevUser } from '../../frontend/types';
+import { broadcastPresence } from '../realtime';
 
 const router = Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'devpulse_jwt_secret_key_9988';
 
-// Register a new developer
-router.post('/register', async (req: Request, res: Response) => {
+const USERNAME_RE = /^[a-z0-9_]{3,20}$/;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function normaliseUsername(raw: string): string {
+  return String(raw || '').trim().toLowerCase().replace(/\s+/g, '_');
+}
+
+function buildProfile(id: string, body: any, username: string): DevUser {
+  const skills = Array.isArray(body.skills) ? body.skills.slice(0, 6).map(String) : [];
+  return {
+    id,
+    username,
+    role: String(body.role || 'Developer').slice(0, 40),
+    avatarEmoji: String(body.avatarEmoji || '👾').slice(0, 8),
+    skills,
+    bio: body.bio ? String(body.bio).slice(0, 280) : undefined,
+    gitHubHandle: body.gitHubHandle ? String(body.gitHubHandle).slice(0, 39) : undefined,
+    status: 'online',
+    streakCount: 1,
+    xpPoints: 0,
+    tier: 'Free',
+    createdAt: new Date().toISOString(),
+  };
+}
+
+/** Make sure a workspace profile exists for an account (e.g. one created directly in Postgres). */
+function ensureProfile(id: string, username: string, techTags: string[] = []): DevUser {
+  return db.getUser(id) || db.saveUser(buildProfile(id, { skills: techTags }, username));
+}
+
+router.post('/register', async (req, res) => {
   try {
-    const { email, password, username, bio, gitHubHandle, techTags } = req.body;
+    const { email, password } = req.body || {};
+    const username = normaliseUsername(req.body?.username);
 
-    // Validate request body
     if (!email || !password || !username) {
-      return res.status(400).json({ error: 'Email, username, and password are required fields.' });
+      return res.status(400).json({ error: 'Email, username and password are required.' });
     }
+    if (!EMAIL_RE.test(email)) return res.status(400).json({ error: 'Enter a valid email address.' });
+    if (!USERNAME_RE.test(username)) {
+      return res.status(400).json({ error: 'Usernames use 3–20 lowercase letters, numbers or underscores.' });
+    }
+    if (String(password).length < 8) return res.status(400).json({ error: 'Passwords need at least 8 characters.' });
 
-    const cleanUsername = username.trim().toLowerCase().replace(/\s+/g, '_');
+    const lowerEmail = String(email).toLowerCase();
+    const passwordHash = await bcrypt.hash(String(password), 10);
 
-    if (!isPrismaEnabled()) {
-      // Local JSON fallback
-      const users = db.getUsers() as any[];
-      const existingUser = users.find(u => u.email?.toLowerCase() === email.toLowerCase() || u.username === cleanUsername);
-      if (existingUser) {
-        if (existingUser.email === email.toLowerCase()) {
-          return res.status(400).json({ error: 'Email is already registered.' });
-        }
-        return res.status(400).json({ error: 'Username is already taken.' });
+    let userId: string;
+    if (isPrismaEnabled()) {
+      const existing = await prisma.user.findFirst({ where: { OR: [{ email: lowerEmail }, { username }] } });
+      if (existing) {
+        return res.status(409).json({ error: existing.email === lowerEmail ? 'That email already has an account.' : 'That username is taken.' });
       }
-
-      const hashedPassword = await bcrypt.hash(password, 10);
-      const newId = `user-${Date.now()}`;
-      const newUser: DevUser & { bio?: string | null; gitHubHandle?: string | null; createdAt?: string; email?: string; password?: string } = {
-        id: newId,
-        username: cleanUsername,
-        role: 'Developer',
-        avatarEmoji: '👨‍💻',
-        skills: techTags || [],
-        status: 'online',
-        streakCount: 0,
-        xpPoints: 0,
-        bio: bio || null,
-        gitHubHandle: gitHubHandle || null,
-        createdAt: new Date().toISOString()
-      };
-
-      // Store credentials privately on the object for simple fallback authentication
-      newUser.email = email.toLowerCase();
-      newUser.password = hashedPassword;
-
-      db.saveUser(newUser);
-
-      const token = jwt.sign(
-        { userId: newUser.id, username: newUser.username, email: newUser.email },
-        JWT_SECRET,
-        { expiresIn: '7d' }
-      );
-
-      return res.status(201).json({
-        message: 'User registered successfully',
-        token,
-        user: {
-          id: newUser.id,
-          email: newUser.email,
-          username: newUser.username,
-          bio: newUser.bio,
-          gitHubHandle: newUser.gitHubHandle,
-          techTags: newUser.skills,
-          createdAt: newUser.createdAt
-        }
+      const created = await prisma.user.create({
+        data: {
+          email: lowerEmail,
+          password: passwordHash,
+          username,
+          bio: req.body.bio || null,
+          gitHubHandle: req.body.gitHubHandle || null,
+          techTags: Array.isArray(req.body.skills) ? req.body.skills : [],
+        },
       });
+      userId = created.id;
+    } else {
+      if (db.getCredentialByEmail(lowerEmail)) return res.status(409).json({ error: 'That email already has an account.' });
+      if (db.findUserByUsername(username)) return res.status(409).json({ error: 'That username is taken.' });
+      userId = `user-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+      db.setCredential(userId, lowerEmail, passwordHash);
     }
 
-    // Check if user already exists
-    const existingUser = await prisma.user.findFirst({
-      where: {
-        OR: [
-          { email: email.toLowerCase() },
-          { username: cleanUsername }
-        ]
-      }
-    });
-
-    if (existingUser) {
-      if (existingUser.email === email.toLowerCase()) {
-        return res.status(400).json({ error: 'Email is already registered.' });
-      }
-      return res.status(400).json({ error: 'Username is already taken.' });
-    }
-
-    // Hash password with robust bcrypt hashing
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Create user in database
-    const user = await prisma.user.create({
-      data: {
-        email: email.toLowerCase(),
-        password: hashedPassword,
-        username: cleanUsername,
-        bio: bio || null,
-        gitHubHandle: gitHubHandle || null,
-        techTags: techTags || [],
-      },
-      select: {
-        id: true,
-        email: true,
-        username: true,
-        bio: true,
-        gitHubHandle: true,
-        techTags: true,
-        createdAt: true,
-      }
-    });
-
-    // Generate JWT Token
-    const token = jwt.sign(
-      { userId: user.id, username: user.username, email: user.email },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    );
-
-    return res.status(201).json({
-      message: 'User registered successfully',
-      token,
-      user
-    });
-
+    const profile = db.saveUser(buildProfile(userId, req.body, username));
+    const token = signToken({ userId, username });
+    return res.status(201).json({ token, user: profile });
   } catch (error: any) {
-    console.error('Registration Error:', error);
-    return res.status(500).json({
-      error: 'An error occurred during registration.',
-      details: error.message || 'Internal database error'
-    });
+    console.error('[auth] register failed:', error);
+    return res.status(500).json({ error: 'Could not create the account. Try again in a moment.' });
   }
 });
 
-// Login developer
-router.post('/login', async (req: Request, res: Response) => {
+router.post('/login', async (req, res) => {
   try {
-    const { loginCredential, password } = req.body; // Can be email or username
-
+    const { loginCredential, password } = req.body || {};
     if (!loginCredential || !password) {
-      return res.status(400).json({ error: 'Username/Email and password are required fields.' });
+      return res.status(400).json({ error: 'Enter your email or username and your password.' });
+    }
+    const credential = String(loginCredential).trim().toLowerCase();
+    const invalid = () => res.status(401).json({ error: 'That email, username or password is incorrect.' });
+
+    if (isPrismaEnabled()) {
+      const user = await prisma.user.findFirst({ where: { OR: [{ email: credential }, { username: credential }] } });
+      if (!user || !(await bcrypt.compare(String(password), user.password))) return invalid();
+      const profile = ensureProfile(user.id, user.username, user.techTags);
+      return res.json({ token: signToken({ userId: user.id, username: user.username }), user: profile });
     }
 
-    const searchCredential = loginCredential.trim().toLowerCase();
+    let userId: string | undefined;
+    const byEmail = db.getCredentialByEmail(credential);
+    if (byEmail) userId = byEmail.userId;
+    else userId = db.findUserByUsername(credential)?.id;
 
-    if (!isPrismaEnabled()) {
-      // Local JSON fallback
-      const users = db.getUsers() as any[];
-      const user = users.find(u => u.email?.toLowerCase() === searchCredential || u.username === searchCredential);
-      if (!user) {
-        return res.status(401).json({ error: 'Invalid credentials. User not found.' });
-      }
+    const cred = userId ? db.getCredential(userId) : undefined;
+    if (!userId || !cred || !(await bcrypt.compare(String(password), cred.passwordHash))) return invalid();
 
-      const isPasswordValid = await bcrypt.compare(password, user.password || '');
-      if (!isPasswordValid) {
-        return res.status(401).json({ error: 'Invalid credentials. Incorrect password.' });
-      }
-
-      const token = jwt.sign(
-        { userId: user.id, username: user.username, email: user.email },
-        JWT_SECRET,
-        { expiresIn: '7d' }
-      );
-
-      return res.status(200).json({
-        message: 'Login successful',
-        token,
-        user: {
-          id: user.id,
-          email: user.email || `${user.username}@devpulse.local`,
-          username: user.username,
-          bio: user.bio,
-          gitHubHandle: user.gitHubHandle,
-          techTags: user.skills || [],
-          createdAt: user.createdAt
-        }
-      });
-    }
-
-    // Find user
-    const user = await prisma.user.findFirst({
-      where: {
-        OR: [
-          { email: searchCredential },
-          { username: searchCredential }
-        ]
-      }
-    });
-
-    if (!user) {
-      return res.status(401).json({ error: 'Invalid credentials. User not found.' });
-    }
-
-    // Verify password match
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) {
-      return res.status(401).json({ error: 'Invalid credentials. Incorrect password.' });
-    }
-
-    // Generate JWT Token
-    const token = jwt.sign(
-      { userId: user.id, username: user.username, email: user.email },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    );
-
-    return res.status(200).json({
-      message: 'Login successful',
-      token,
-      user: {
-        id: user.id,
-        email: user.email,
-        username: user.username,
-        bio: user.bio,
-        gitHubHandle: user.gitHubHandle,
-        techTags: user.techTags,
-        createdAt: user.createdAt,
-      }
-    });
-
+    const profile = db.getUser(userId)!;
+    return res.json({ token: signToken({ userId, username: profile.username }), user: profile });
   } catch (error: any) {
-    console.error('Login Error:', error);
-    return res.status(500).json({
-      error: 'An error occurred during login.',
-      details: error.message || 'Internal database error'
-    });
+    console.error('[auth] login failed:', error);
+    return res.status(500).json({ error: 'Could not sign in. Try again in a moment.' });
   }
 });
 
-// Get currently authenticated user profile
-router.get('/profile', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    if (!req.user) {
-      return res.status(401).json({ error: 'Unauthorized profile request.' });
-    }
+router.get('/me', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+  const profile = db.getUser(req.user!.userId);
+  if (!profile) return res.status(404).json({ error: 'This account no longer exists.' });
+  return res.json(profile);
+});
 
-    if (!isPrismaEnabled()) {
-      const user = db.getUser(req.user.userId) as any;
-      if (!user) {
-        return res.status(404).json({ error: 'Profile not found.' });
-      }
-      return res.status(200).json({
-        id: user.id,
-        email: user.email || `${user.username}@devpulse.local`,
-        username: user.username,
-        bio: user.bio || '',
-        gitHubHandle: user.gitHubHandle || '',
-        techTags: user.skills || [],
-        createdAt: user.createdAt || new Date().toISOString()
-      });
-    }
+// Kept for compatibility with earlier clients.
+router.get('/profile', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+  const profile = db.getUser(req.user!.userId);
+  if (!profile) return res.status(404).json({ error: 'This account no longer exists.' });
+  return res.json(profile);
+});
 
-    const user = await prisma.user.findUnique({
-      where: { id: req.user.userId },
-      select: {
-        id: true,
-        email: true,
-        username: true,
-        bio: true,
-        gitHubHandle: true,
-        techTags: true,
-        createdAt: true,
-      }
-    });
+router.patch('/me', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+  const body = req.body || {};
+  const patch: Partial<DevUser> = {};
+  if (typeof body.role === 'string') patch.role = body.role.slice(0, 40);
+  if (typeof body.avatarEmoji === 'string') patch.avatarEmoji = body.avatarEmoji.slice(0, 8);
+  if (Array.isArray(body.skills)) patch.skills = body.skills.slice(0, 6).map(String);
+  if (typeof body.customStatus === 'string') patch.customStatus = body.customStatus.slice(0, 80);
+  if (typeof body.bio === 'string') patch.bio = body.bio.slice(0, 280);
+  if (typeof body.gitHubHandle === 'string') patch.gitHubHandle = body.gitHubHandle.slice(0, 39);
+  if (['online', 'away', 'dnd'].includes(body.status)) patch.status = body.status;
 
-    if (!user) {
-      return res.status(404).json({ error: 'Profile not found.' });
-    }
+  const updated = db.updateUser(req.user!.userId, patch);
+  if (!updated) return res.status(404).json({ error: 'This account no longer exists.' });
+  broadcastPresence();
 
-    return res.status(200).json(user);
-  } catch (error: any) {
-    console.error('Get Profile Error:', error);
-    return res.status(500).json({ error: 'Failed to retrieve profile data.' });
+  if (isPrismaEnabled()) {
+    prisma.user
+      .update({ where: { id: req.user!.userId }, data: { bio: updated.bio ?? null, gitHubHandle: updated.gitHubHandle ?? null, techTags: updated.skills } })
+      .catch((err) => console.warn('[auth] profile sync to Postgres failed:', err.message));
   }
+  return res.json(updated);
 });
 
 export default router;

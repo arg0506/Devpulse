@@ -1,121 +1,87 @@
 import express from 'express';
 import Stripe from 'stripe';
 import { db } from '../db';
+import { authMiddleware, AuthenticatedRequest } from '../middleware/auth';
+import { getIO, broadcastPresence } from '../realtime';
+import { PlanTier } from '../../frontend/types';
 
 const router = express.Router();
 
-// Lazy initialization helper for Stripe to prevent startup crashes if key is missing
+export const PLANS: Record<'pro' | 'enterprise', { name: string; tier: PlanTier; amountCents: number }> = {
+  pro: { name: 'Pro', tier: 'Pro', amountCents: 1500 },
+  enterprise: { name: 'Enterprise', tier: 'Enterprise', amountCents: 9900 },
+};
+
 let stripeInstance: Stripe | null = null;
 function getStripe(): Stripe | null {
   const key = process.env.STRIPE_SECRET_KEY;
-  if (!key) {
-    return null;
-  }
-  if (!stripeInstance) {
-    stripeInstance = new Stripe(key, {
-      apiVersion: '2023-10-16' as any, // standard API version
-    });
-  }
+  if (!key) return null;
+  if (!stripeInstance) stripeInstance = new Stripe(key);
   return stripeInstance;
 }
 
-/**
- * POST /api/payments/create-payment-intent
- * Initiates a checkout transaction. Returns clientSecret or a Demo session.
- */
-router.post('/create-payment-intent', async (req, res) => {
-  try {
-    const { amount, planName, userId, username } = req.body;
+router.get('/config', (_req, res) => {
+  res.json({ mode: getStripe() ? 'live' : 'demo', plans: PLANS });
+});
 
-    if (!amount || !planName || !userId) {
-      return res.status(400).json({ error: 'Missing required parameters (amount, planName, userId)' });
-    }
+/** Starts a checkout. The amount always comes from the server-side plan table, never the client. */
+router.post('/create-payment-intent', authMiddleware, async (req: AuthenticatedRequest, res) => {
+  try {
+    const planKey = req.body?.plan as keyof typeof PLANS;
+    const plan = PLANS[planKey];
+    if (!plan) return res.status(400).json({ error: 'Choose the Pro or Enterprise plan.' });
 
     const stripe = getStripe();
     if (stripe) {
-      // Create a real Stripe PaymentIntent
-      const paymentIntent = await stripe.paymentIntents.create({
-        amount: amount, // in cents, e.g., 1500 for $15.00
+      const intent = await stripe.paymentIntents.create({
+        amount: plan.amountCents,
         currency: 'usd',
-        metadata: {
-          userId,
-          username: username || 'unknown_user',
-          planName,
-        },
-        description: `DevPulse Upgrade: ${planName}`,
+        metadata: { userId: req.user!.userId, plan: planKey },
+        description: `DevPulse ${plan.name}`,
+        automatic_payment_methods: { enabled: true },
       });
-
-      return res.json({
-        clientSecret: paymentIntent.client_secret,
-        isDemo: false,
-        amount,
-        planName,
-      });
-    } else {
-      // Graceful fallback to Sandbox/Demo mode
-      console.log(`[Stripe Payments] No STRIPE_SECRET_KEY found. Issuing simulated sandbox session.`);
-      return res.json({
-        clientSecret: `demo_secret_devpulse_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-        isDemo: true,
-        amount,
-        planName,
-      });
+      return res.json({ clientSecret: intent.client_secret, paymentIntentId: intent.id, isDemo: false, plan: planKey });
     }
+
+    return res.json({
+      clientSecret: `demo_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      paymentIntentId: `demo_pi_${Date.now()}`,
+      isDemo: true,
+      plan: planKey,
+    });
   } catch (error: any) {
-    console.error('Error creating payment intent:', error);
-    return res.status(500).json({ error: error.message || 'Internal server error' });
+    console.error('[payments] create intent failed:', error);
+    return res.status(500).json({ error: error.message || 'Could not start checkout.' });
   }
 });
 
-/**
- * POST /api/payments/confirm-payment
- * Complete and record the payment in our databases, upgrading the user tier.
- */
-router.post('/confirm-payment', (req, res) => {
+router.post('/confirm-payment', authMiddleware, async (req: AuthenticatedRequest, res) => {
   try {
-    const { userId, planName, paymentIntentId, isDemo } = req.body;
+    const planKey = req.body?.plan as keyof typeof PLANS;
+    const plan = PLANS[planKey];
+    const paymentIntentId = String(req.body?.paymentIntentId || '');
+    if (!plan) return res.status(400).json({ error: 'Choose the Pro or Enterprise plan.' });
 
-    if (!userId || !planName) {
-      return res.status(400).json({ error: 'Missing required fields (userId, planName)' });
+    const stripe = getStripe();
+    if (stripe) {
+      // In live mode, only upgrade once Stripe reports the payment as complete.
+      const intent = await stripe.paymentIntents.retrieve(paymentIntentId);
+      if (intent.status !== 'succeeded' || intent.metadata.userId !== req.user!.userId) {
+        return res.status(402).json({ error: 'Stripe has not confirmed this payment yet.' });
+      }
+    } else if (!paymentIntentId.startsWith('demo_')) {
+      return res.status(400).json({ error: 'Unknown payment reference.' });
     }
 
-    // Determine target tier based on planName
-    let tier: 'Sovereign' | 'Pro' | 'Enterprise' = 'Sovereign';
-    if (planName.toLowerCase().includes('cluster') || planName.toLowerCase().includes('squad') || planName.toLowerCase().includes('pro')) {
-      tier = 'Pro';
-    } else if (planName.toLowerCase().includes('enterprise') || planName.toLowerCase().includes('galaxy')) {
-      tier = 'Enterprise';
-    }
-
-    // Retrieve and update user in our local Express backend database memory/file store
-    const user = db.getUser(userId);
-    if (user) {
-      const updatedUser = {
-        ...user,
-        tier,
-        paymentStatus: 'paid',
-        paymentIntentId: paymentIntentId || `simulated_${Date.now()}`
-      } as any;
-      
-      db.saveUser(updatedUser);
-      console.log(`[Payments Core] Successfully upgraded user ${userId} to ${tier} tier.`);
-      return res.json({
-        success: true,
-        user: updatedUser,
-        message: `Successfully provisioned ${tier} tier capability context.`
-      });
-    } else {
-      // If user is registered on Firebase first but hasn't entered workspace DB,
-      // create or return a response that can be handled.
-      return res.json({
-        success: true,
-        message: `Database signal queued. Please register your handle in the workspace to active the tier.`,
-        pendingTier: tier
-      });
-    }
+    const user = db.getUser(req.user!.userId);
+    if (!user) return res.status(404).json({ error: 'This account no longer exists.' });
+    const updated = db.saveUser({ ...user, tier: plan.tier, paymentStatus: 'paid', paymentIntentId });
+    getIO()?.emit('user:updated', updated);
+    broadcastPresence();
+    return res.json({ success: true, user: updated });
   } catch (error: any) {
-    console.error('Error confirming payment:', error);
-    return res.status(500).json({ error: error.message || 'Internal server error' });
+    console.error('[payments] confirm failed:', error);
+    return res.status(500).json({ error: error.message || 'Could not confirm the payment.' });
   }
 });
 

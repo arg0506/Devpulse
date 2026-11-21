@@ -2,147 +2,72 @@ import { Router, Response } from 'express';
 import { db } from '../db';
 import prisma, { isPrismaEnabled } from '../prismaClient';
 import { authMiddleware, AuthenticatedRequest } from '../middleware/auth';
+import { getIO } from '../realtime';
 
 const router = Router();
 
-// GET all communities
-router.get('/', async (req: AuthenticatedRequest, res: Response) => {
-  if (!isPrismaEnabled()) {
-    return res.json(db.getCommunities());
-  }
-  try {
-    // Attempt Prisma fetch
-    const prismaCommunities = await prisma.community.findMany({
-      include: {
-        members: {
-          select: { userId: true }
-        },
-        channels: {
-          select: { id: true, name: true }
-        }
-      }
+/** Best-effort copy into Postgres. The JSON store stays the source of truth for the live workspace. */
+function mirror(task: () => Promise<unknown>) {
+  if (!isPrismaEnabled()) return;
+  task().catch((err) => console.warn('[communities] Postgres mirror failed:', err.message));
+}
+
+router.get('/', (_req, res) => {
+  res.json(db.getCommunities());
+});
+
+router.post('/', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+  const name = String(req.body?.name || '').trim();
+  const description = String(req.body?.description || '').trim();
+  if (name.length < 3) return res.status(400).json({ error: 'Community names need at least 3 characters.' });
+
+  const userId = req.user!.userId;
+  const community = db.createCommunity(name.slice(0, 40), description.slice(0, 200), userId);
+  const io = getIO();
+  io?.emit('community:new', community);
+  community.channels.forEach((id) => {
+    const chan = db.getChannel(id);
+    if (chan) io?.emit('channel:new', chan);
+  });
+
+  mirror(async () => {
+    await prisma.community.upsert({
+      where: { id: community.id },
+      update: {},
+      create: {
+        id: community.id,
+        name: community.name,
+        description: community.description,
+        ownerId: userId,
+        members: { create: { userId, role: 'ADMIN' } },
+      },
     });
+  });
 
-    const formatted = prismaCommunities.map(c => ({
-      id: c.id,
-      name: c.name,
-      description: c.description || '',
-      channels: c.channels.map(chan => chan.id),
-      members: c.members.map(m => m.userId)
-    }));
-
-    return res.json(formatted);
-  } catch (error) {
-    console.warn('[Prisma Warning] Failed to get communities from SQL DB, falling back to JSON storage:', error);
-    return res.json(db.getCommunities());
-  }
+  return res.status(201).json(community);
 });
 
-// POST create community
-router.post('/', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const { name, description } = req.body;
-    if (!name) {
-      return res.status(400).json({ error: 'Name is required' });
-    }
-    const creatorId = req.user?.userId || 'unknown';
+/** Join, or leave when already a member. */
+router.post('/:id/join', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user!.userId;
+  const community = db.toggleCommunityMembership(req.params.id, userId);
+  if (!community) return res.status(404).json({ error: 'That community no longer exists.' });
+  getIO()?.emit('community:update', community);
 
-    if (!isPrismaEnabled()) {
-      const jsonComm = db.createCommunity(name, description || '', creatorId);
-      return res.status(201).json(jsonComm);
-    }
-
-    try {
-      // Create community in Prisma
-      const newComm = await prisma.community.create({
-        data: {
-          name,
-          description: description || '',
-          ownerId: creatorId,
-          members: {
-            create: {
-              userId: creatorId,
-              role: 'ADMIN'
-            }
-          },
-          channels: {
-            create: {
-              name: `${name.toLowerCase().replace(/[^a-z0-9]/g, '-')}-general`
-            }
-          }
-        },
-        include: {
-          channels: true,
-          members: true
-        }
+  const joined = community.members.includes(userId);
+  mirror(async () => {
+    if (joined) {
+      await prisma.communityMember.upsert({
+        where: { userId_communityId: { userId, communityId: community.id } },
+        update: {},
+        create: { userId, communityId: community.id },
       });
-
-      const formatted = {
-        id: newComm.id,
-        name: newComm.name,
-        description: newComm.description || '',
-        channels: newComm.channels.map(chan => chan.id),
-        members: newComm.members.map(m => m.userId)
-      };
-
-      // Keep JSON storage synchronized
-      db.createCommunity(name, description || '', creatorId);
-
-      return res.status(201).json(formatted);
-    } catch (dbErr) {
-      console.warn('[Prisma Warning] Failed to create community in SQL DB, writing to JSON storage:', dbErr);
-      const jsonComm = db.createCommunity(name, description || '', creatorId);
-      return res.status(201).json(jsonComm);
+    } else {
+      await prisma.communityMember.deleteMany({ where: { userId, communityId: community.id } });
     }
-  } catch (error: any) {
-    console.error('Create Community error:', error);
-    return res.status(500).json({ error: 'Internal Server Error' });
-  }
-});
+  });
 
-// POST join community
-router.post('/:id/join', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const { id } = req.params;
-    const userId = req.user?.userId || 'unknown';
-
-    if (!isPrismaEnabled()) {
-      db.joinCommunity(id, userId);
-      return res.json({ message: 'Joined community successfully' });
-    }
-
-    try {
-      // Join in Prisma SQL DB
-      const existingMember = await prisma.communityMember.findFirst({
-        where: {
-          communityId: id,
-          userId
-        }
-      });
-
-      if (!existingMember) {
-        await prisma.communityMember.create({
-          data: {
-            communityId: id,
-            userId,
-            role: 'MEMBER'
-          }
-        });
-      }
-
-      // Sync with JSON DB
-      db.joinCommunity(id, userId);
-
-      return res.json({ message: 'Joined community successfully' });
-    } catch (dbErr) {
-      console.warn('[Prisma Warning] Failed to join community in SQL DB, using JSON storage:', dbErr);
-      db.joinCommunity(id, userId);
-      return res.json({ message: 'Joined community successfully (local backup)' });
-    }
-  } catch (error: any) {
-    console.error('Join Community error:', error);
-    return res.status(500).json({ error: 'Internal Server Error' });
-  }
+  return res.json(community);
 });
 
 export default router;
