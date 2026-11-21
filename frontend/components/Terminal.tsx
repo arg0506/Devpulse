@@ -1,213 +1,174 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Terminal as TerminalIcon, X, HelpCircle, ChevronRight, Play } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { X } from 'lucide-react';
 import { socket } from '../socket';
+import { useWorkspace } from '../lib/workspace';
 
-interface TerminalProps {
-  onClose: () => void;
-  userId: string;
-  username: string;
-}
-
-interface LogLine {
+interface Line {
   text: string;
-  isError?: boolean;
-  isPending?: boolean;
-  type?: 'input' | 'output';
+  kind: 'input' | 'output' | 'error' | 'pending';
 }
 
-export default function Terminal({ onClose, userId, username }: TerminalProps) {
-  const [command, setCommand] = useState('');
-  const [history, setHistory] = useState<LogLine[]>([
-    { text: 'DevPulse Sandbox Terminal Console [v1.4.2-stable]', type: 'output' },
-    { text: 'Type "help" to list available server-side community controls.', type: 'output' },
-    { text: '', type: 'output' },
-  ]);
-  const [commandHistory, setCommandHistory] = useState<string[]>([]);
-  const [historyIndex, setHistoryIndex] = useState(-1);
-  const terminalEndRef = useRef<HTMLDivElement>(null);
+const TONES: Record<string, string> = {
+  accent: '#ff8a90',
+  ok: '#4fd69c',
+  warn: '#f0b955',
+  err: '#ff7d87',
+  muted: '#7d8390',
+};
+
+/** Renders the server's [[tone]text] markup. */
+function formatLine(text: string): React.ReactNode[] {
+  const out: React.ReactNode[] = [];
+  const re = /\[\[(accent|ok|warn|err|muted)\]([^\]]*)\]/g;
+  let last = 0;
+  let i = 0;
+  for (const m of text.matchAll(re)) {
+    const idx = m.index ?? 0;
+    if (idx > last) out.push(text.slice(last, idx));
+    out.push(
+      <span key={i++} style={{ color: TONES[m[1]] }}>
+        {m[2]}
+      </span>,
+    );
+    last = idx + m[0].length;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return out;
+}
+
+const SUGGESTIONS = ['help', 'whoami', 'users', 'stats', 'events', 'ai '];
+
+export default function Terminal({ onClose }: { onClose: () => void }) {
+  const { user } = useWorkspace();
+  const [lines, setLines] = useState<Line[]>([{ text: 'DevPulse console. Type [[accent]help] for commands.', kind: 'output' }]);
+  const [value, setValue] = useState('');
+  const [history, setHistory] = useState<string[]>([]);
+  const [cursor, setCursor] = useState(-1);
+  const [height, setHeight] = useState(() => Number(localStorage.getItem('devpulse_console_h')) || 260);
+  const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    // Scroll to bottom on updates
-    terminalEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [history]);
-
-  useEffect(() => {
-    // Focus terminal input on mount
     inputRef.current?.focus();
-
-    // Listen to socket responses
-    socket.on('terminal:response', (data: { output: string; isError?: boolean; isPending?: boolean }) => {
-      if (data.output === 'CLEAR_CONSOLE') {
-        setHistory([]);
-        return;
-      }
-
-      setHistory((prev) => {
-        // Remove active pending if it was pending
-        const filtered = prev.filter(line => !line.isPending);
-        return [
-          ...filtered,
-          {
-            text: data.output,
-            isError: data.isError,
-            isPending: data.isPending,
-            type: 'output',
-          },
-        ];
-      });
-    });
-
+    const onResponse = (data: { output: string; isError?: boolean; isPending?: boolean }) => {
+      if (data.output === 'CLEAR_CONSOLE') return setLines([]);
+      setLines((prev) => [
+        ...prev.filter((l) => l.kind !== 'pending'),
+        { text: data.output, kind: data.isPending ? 'pending' : data.isError ? 'error' : 'output' },
+      ]);
+    };
+    socket.on('terminal:response', onResponse);
     return () => {
-      socket.off('terminal:response');
+      socket.off('terminal:response', onResponse);
     };
   }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const cmd = command.trim();
-    if (!cmd) return;
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ block: 'end' });
+  }, [lines]);
 
-    // Append to terminal history
-    setHistory((prev) => [...prev, { text: `$ ${cmd}`, type: 'input' }]);
-    setCommandHistory((prev) => [cmd, ...prev]);
-    setHistoryIndex(-1);
-    setCommand('');
-
-    // Send command to backend
-    socket.emit('terminal:command', { command: cmd, userId, username });
+  const run = (cmd: string) => {
+    const c = cmd.trim();
+    if (!c) return;
+    setLines((prev) => [...prev, { text: c, kind: 'input' }]);
+    setHistory((h) => [c, ...h.filter((x) => x !== c)].slice(0, 50));
+    setCursor(-1);
+    setValue('');
+    socket.emit('terminal:command', { command: c });
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const onKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'ArrowUp') {
       e.preventDefault();
-      if (historyIndex < commandHistory.length - 1) {
-        const nextIndex = historyIndex + 1;
-        setHistoryIndex(nextIndex);
-        setCommand(commandHistory[nextIndex]);
+      const next = Math.min(cursor + 1, history.length - 1);
+      if (history[next] !== undefined) {
+        setCursor(next);
+        setValue(history[next]);
       }
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
-      if (historyIndex > 0) {
-        const nextIndex = historyIndex - 1;
-        setHistoryIndex(nextIndex);
-        setCommand(commandHistory[nextIndex]);
-      } else if (historyIndex === 0) {
-        setHistoryIndex(-1);
-        setCommand('');
-      }
+      const next = cursor - 1;
+      setCursor(Math.max(next, -1));
+      setValue(next >= 0 ? history[next] : '');
+    } else if (e.key === 'Tab') {
+      e.preventDefault();
+      const match = SUGGESTIONS.find((s) => s.startsWith(value) && s !== value);
+      if (match) setValue(match);
+    } else if (e.key === 'l' && e.ctrlKey) {
+      e.preventDefault();
+      setLines([]);
     }
   };
 
-  const formatText = (text: string) => {
-    // Handle pseudo terminal styles e.g. [[b;#58a6ff;]some bold text]
-    // Regex matches [[style_configs]inner_text]
-    const regex = /\[\[b;([^;]+);\]([^\]]+)\]/g;
-    const parts = [];
-    let lastIndex = 0;
-    let match;
-
-    while ((match = regex.exec(text)) !== null) {
-      if (match.index > lastIndex) {
-        parts.push(<span key={lastIndex}>{text.substring(lastIndex, match.index)}</span>);
-      }
-      const color = match[1];
-      const content = match[2];
-      parts.push(
-        <span key={match.index} style={{ color, fontWeight: 'bold' }}>
-          {content}
-        </span>
-      );
-      lastIndex = regex.lastIndex;
-    }
-
-    if (lastIndex < text.length) {
-      parts.push(<span key={lastIndex}>{text.substring(lastIndex)}</span>);
-    }
-
-    return parts.length > 0 ? parts : text;
+  const startResize = (e: React.PointerEvent) => {
+    const startY = e.clientY;
+    const startH = height;
+    const move = (ev: PointerEvent) => setHeight(Math.min(Math.max(startH + (startY - ev.clientY), 140), window.innerHeight * 0.7));
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      setHeight((h) => {
+        try {
+          localStorage.setItem('devpulse_console_h', String(Math.round(h)));
+        } catch {
+          /* ignore */
+        }
+        return h;
+      });
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
   };
 
   return (
-    <div className="bg-[#0c091d]/95 border-t border-purple-500/20 flex flex-col h-80 font-mono text-xs shadow-[0_-10px_40px_rgba(0,0,0,0.6)] z-40 relative backdrop-blur-xl">
-      {/* Terminal Title Bar */}
-      <div className="bg-[#110d24]/90 px-5 py-3 flex items-center justify-between border-b border-purple-500/25 text-purple-200">
-        <div className="flex items-center gap-2.5">
-          <TerminalIcon size={14} className="text-cyan-400 drop-shadow-[0_0_8px_rgba(6,182,212,0.5)]" />
-          <span className="text-xs font-serif font-bold text-transparent bg-clip-text bg-gradient-to-r from-white to-purple-200">Console Interactive Sandbox Pipeline</span>
-          <span className="text-[9px] bg-cyan-950/80 text-cyan-400 border border-cyan-500/30 px-2 py-0.5 rounded-full font-bold tracking-wider uppercase animate-pulse">
-            CLUSTER ONLINE
-          </span>
+    <section aria-label="Console" className="relative flex flex-shrink-0 flex-col bg-console text-console-ink" style={{ height }}>
+      <div onPointerDown={startResize} className="absolute inset-x-0 -top-1 h-2 cursor-row-resize" aria-hidden="true" />
+      <div className="flex h-9 flex-shrink-0 items-center justify-between border-b border-white/8 px-3">
+        <div className="flex items-center gap-3 font-mono text-[11px] text-[#7d8390]">
+          <span className="text-[#c9ced8]">console</span>
+          <span>@{user.username}</span>
+          <span className="hidden sm:inline">↑↓ history · tab complete · ctrl+l clear</span>
         </div>
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => {
-              setHistory((prev) => [...prev, { text: `$ help`, type: 'input' }]);
-              socket.emit('terminal:command', { command: 'help', userId, username });
-            }}
-            className="text-[11px] font-bold text-cyan-400 hover:text-cyan-300 transition-colors flex items-center gap-1 cursor-pointer bg-cyan-950/40 px-2.5 py-1 border border-cyan-500/20 rounded-md shadow-sm"
-            title="Help list"
-          >
-            <HelpCircle size={12} />
-            <span>Help List</span>
-          </button>
-          <button
-            onClick={onClose}
-            className="hover:text-white hover:bg-white/[0.05] p-1 rounded-md transition-all cursor-pointer text-purple-400"
-            title="Close Terminal (Ctrl + `)"
-          >
-            <X size={14} />
-          </button>
-        </div>
+        <button type="button" onClick={onClose} aria-label="Close console" className="rounded p-1 text-[#7d8390] hover:bg-white/8 hover:text-white">
+          <X size={14} />
+        </button>
       </div>
-
-      {/* Terminal Lines Output */}
-      <div className="flex-1 overflow-y-auto p-5 space-y-2.5 bg-[#08060f]/95 text-purple-200 scrollbar-thin scrollbar-thumb-purple-900 scrollbar-track-transparent">
-        {history.map((line, idx) => (
-          <div
-            key={idx}
-            className={`whitespace-pre-wrap leading-relaxed tracking-wide font-mono ${
-              line.type === 'input' 
-                ? 'text-cyan-400 font-semibold' 
-                : line.isError 
-                  ? 'text-pink-400 border-l-2 border-pink-500/60 pl-2 bg-pink-950/10 py-1' 
-                  : line.isPending
-                    ? 'text-yellow-400 animate-pulse font-semibold'
-                    : 'text-purple-100/90'
-            }`}
-          >
-            {formatText(line.text)}
+      <div className="flex-1 overflow-y-auto px-4 py-3 font-mono text-[12.5px] leading-[1.7]" onClick={() => inputRef.current?.focus()}>
+        {lines.map((l, i) => (
+          <div key={i} className="whitespace-pre-wrap">
+            {l.kind === 'input' ? (
+              <>
+                <span className="text-[#ff8a90]">❯ </span>
+                <span className="text-white">{l.text}</span>
+              </>
+            ) : (
+              <span className={l.kind === 'error' ? 'text-[#ff7d87]' : l.kind === 'pending' ? 'animate-blink text-[#7d8390]' : ''}>
+                {formatLine(l.text)}
+              </span>
+            )}
           </div>
         ))}
-        <div ref={terminalEndRef} />
-      </div>
-
-      {/* Terminal Interactive Input */}
-      <form onSubmit={handleSubmit} className="border-t border-purple-500/20 bg-[#0d0a22]/95 px-5 py-3 flex items-center gap-3">
-        <ChevronRight size={16} className="text-cyan-400 flex-shrink-0 animate-pulse" />
-        <span className="text-purple-400 font-bold font-mono text-xs select-none">dp_cluster:~</span>
-        <input
-          ref={inputRef}
-          type="text"
-          value={command}
-          onChange={(e) => setCommand(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Type 'git status', 'pulse-stats', 'ai summarize react', or 'help'..."
-          className="flex-1 bg-transparent border-none outline-none focus:ring-0 text-white font-mono text-xs placeholder-purple-300/30 tracking-wider"
-          autoComplete="off"
-          autoCorrect="off"
-          autoCapitalize="off"
-          spellCheck="false"
-        />
-        <button
-          type="submit"
-          className="bg-gradient-to-r from-purple-600 to-indigo-600 border border-purple-400/30 text-white hover:from-purple-500 hover:to-indigo-500 shadow-[0_0_10px_rgba(124,58,237,0.3)] transition-all px-3 py-1.5 rounded-lg text-[10px] font-bold tracking-wider uppercase flex items-center gap-1 cursor-pointer"
-          title="Run Command"
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            run(value);
+          }}
+          className="flex items-center"
         >
-          <span>Run</span>
-          <Play size={10} />
-        </button>
-      </form>
-    </div>
+          <span className="text-[#ff8a90]">❯&nbsp;</span>
+          <input
+            ref={inputRef}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={onKey}
+            spellCheck={false}
+            autoComplete="off"
+            aria-label="Console command"
+            className="flex-1 bg-transparent text-white caret-[#ff8a90] outline-none"
+          />
+        </form>
+        <div ref={endRef} />
+      </div>
+    </section>
   );
 }
