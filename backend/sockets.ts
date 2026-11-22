@@ -1,7 +1,7 @@
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import { Server as HTTPServer } from 'http';
 import { db, BOT_IDS } from './db';
-import { verifyToken } from './middleware/auth';
+import { verifyToken, readCookie, SESSION_COOKIE } from './middleware/auth';
 import { generateText, isGeminiReady, GEMINI_MODEL } from './gemini';
 import { setIO, connectionCounts, broadcastPresence } from './realtime';
 import { DevMessage, DevUser, ThreadReply, WhiteboardElement, CodeSnippet } from '../frontend/types';
@@ -179,7 +179,8 @@ export function initSockets(server: HTTPServer) {
 
   // Every socket must present a valid session token.
   io.use((socket, next) => {
-    const payload = verifyToken(socket.handshake.auth?.token);
+    // The browser sends the HttpOnly session cookie with the handshake; a token in auth still works for other clients.
+    const payload = verifyToken(socket.handshake.auth?.token || readCookie(socket.handshake.headers.cookie, SESSION_COOKIE));
     if (!payload) return next(new Error('unauthorized'));
     const user = db.getUser(payload.userId);
     if (!user) return next(new Error('unauthorized'));

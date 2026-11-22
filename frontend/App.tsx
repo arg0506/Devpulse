@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { DevUser } from './types';
-import { api, ApiError, getToken, setToken } from './lib/api';
+import { api, ApiError, hasSession, setSessionMarker } from './lib/api';
 import { socket } from './socket';
 import { WorkspaceProvider } from './lib/workspace';
 import LandingPage from './components/LandingPage';
@@ -12,12 +12,12 @@ type Screen = 'loading' | 'landing' | 'signin' | 'register' | 'app';
 
 export default function App() {
   const [user, setUser] = useState<DevUser | null>(null);
-  const [screen, setScreen] = useState<Screen>(() => (getToken() ? 'loading' : 'landing'));
+  const [screen, setScreen] = useState<Screen>(() => (hasSession() ? 'loading' : 'landing'));
   const [pendingPlan, setPendingPlan] = useState<'pro' | 'enterprise' | null>(null);
 
   // Restore an existing session.
   useEffect(() => {
-    if (!getToken()) return;
+    if (!hasSession()) return;
     api<DevUser>('/api/auth/me')
       .then((me) => {
         setUser(me);
@@ -25,7 +25,7 @@ export default function App() {
       })
       .catch((err) => {
         // Only a rejected session clears the token; a network error keeps it for the next visit.
-        if (err instanceof ApiError && err.status < 500) setToken(null);
+        if (err instanceof ApiError && err.status < 500) setSessionMarker(false);
         setScreen('landing');
       });
   }, []);
@@ -33,7 +33,7 @@ export default function App() {
   const signOut = useCallback(() => {
     // Tell the server to end this session too, so a copied token stops working. Sign-out succeeds even if the call fails.
     api('/api/auth/logout', { method: 'POST' }).catch(() => undefined);
-    setToken(null);
+    setSessionMarker(false);
     socket.disconnect();
     setUser(null);
     setPendingPlan(null);

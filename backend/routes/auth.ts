@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import prisma, { isPrismaEnabled } from '../prismaClient';
-import { authMiddleware, AuthenticatedRequest, signToken } from '../middleware/auth';
+import { authMiddleware, AuthenticatedRequest, signToken, sessionCookie, clearSessionCookie } from '../middleware/auth';
 import { db } from '../db';
 import { DevUser } from '../../frontend/types';
 import { broadcastPresence, getIO } from '../realtime';
@@ -87,8 +87,8 @@ router.post('/register', async (req, res) => {
     }
 
     const profile = db.saveUser(buildProfile(userId, req.body, username));
-    const token = signToken({ userId, username });
-    return res.status(201).json({ token, user: profile });
+    res.setHeader('Set-Cookie', sessionCookie(signToken({ userId, username })));
+    return res.status(201).json({ user: profile });
   } catch (error: any) {
     console.error('[auth] register failed:', error);
     return res.status(500).json({ error: 'Could not create the account. Try again in a moment.' });
@@ -108,7 +108,8 @@ router.post('/login', async (req, res) => {
       const user = await prisma.user.findFirst({ where: { OR: [{ email: credential }, { username: credential }] } });
       if (!user || !(await bcrypt.compare(String(password), user.password))) return invalid();
       const profile = ensureProfile(user.id, user.username, user.techTags);
-      return res.json({ token: signToken({ userId: user.id, username: user.username }), user: profile });
+      res.setHeader('Set-Cookie', sessionCookie(signToken({ userId: user.id, username: user.username })));
+      return res.json({ user: profile });
     }
 
     let userId: string | undefined;
@@ -120,7 +121,8 @@ router.post('/login', async (req, res) => {
     if (!userId || !cred || !(await bcrypt.compare(String(password), cred.passwordHash))) return invalid();
 
     const profile = db.getUser(userId)!;
-    return res.json({ token: signToken({ userId, username: profile.username }), user: profile });
+    res.setHeader('Set-Cookie', sessionCookie(signToken({ userId, username: profile.username })));
+    return res.json({ user: profile });
   } catch (error: any) {
     console.error('[auth] login failed:', error);
     return res.status(500).json({ error: 'Could not sign in. Try again in a moment.' });
@@ -132,6 +134,7 @@ router.post('/logout', authMiddleware, (req: AuthenticatedRequest, res: Response
   const userId = req.user!.userId;
   db.revokeSessions(userId);
   getIO()?.in(`user:${userId}`).disconnectSockets(true);
+  res.setHeader('Set-Cookie', clearSessionCookie());
   res.json({ ok: true });
 });
 

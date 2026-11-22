@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ArrowLeft, AlertCircle, Eye, EyeOff } from 'lucide-react';
-import { api, setToken } from '../lib/api';
+import { api, setSessionMarker } from '../lib/api';
 import { DevUser } from '../types';
 import { LemoMark, cx, AVATAR_CHOICES, SKILL_CHOICES } from './ui';
 
@@ -75,7 +75,7 @@ export default function AuthScreen({ initialMode, onAuthenticated, onBack }: Aut
     setError(null);
     try {
       const res = await api<{ token: string; user: DevUser }>('/api/auth/login', { body: { loginCredential: credential, password } });
-      setToken(res.token);
+      setSessionMarker(true);
       onAuthenticated(res.user);
     } catch (err: any) {
       setError(err.message);
@@ -101,7 +101,7 @@ export default function AuthScreen({ initialMode, onAuthenticated, onBack }: Aut
       const res = await api<{ token: string; user: DevUser }>('/api/auth/register', {
         body: { email, username, password, role, avatarEmoji: avatar, skills },
       });
-      setToken(res.token);
+      setSessionMarker(true);
       onAuthenticated(res.user);
     } catch (err: any) {
       setError(err.message);

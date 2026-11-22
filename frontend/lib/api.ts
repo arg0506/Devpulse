@@ -1,19 +1,29 @@
-const TOKEN_KEY = 'devpulse_token';
+// The session itself is an HttpOnly cookie that page scripts cannot read. This marker only
+// tells the app whether to try restoring a session on load. It holds no secret.
+const SESSION_KEY = 'lemo_signed_in';
+const LEGACY_TOKEN_KEY = 'devpulse_token';
 
-export function getToken(): string | null {
+try {
+  // Older versions kept the token in localStorage. Remove it so it cannot be read by page scripts.
+  localStorage.removeItem(LEGACY_TOKEN_KEY);
+} catch {
+  /* storage unavailable */
+}
+
+export function hasSession(): boolean {
   try {
-    return localStorage.getItem(TOKEN_KEY);
+    return localStorage.getItem(SESSION_KEY) === '1';
   } catch {
-    return null;
+    return false;
   }
 }
 
-export function setToken(token: string | null) {
+export function setSessionMarker(signedIn: boolean) {
   try {
-    if (token) localStorage.setItem(TOKEN_KEY, token);
-    else localStorage.removeItem(TOKEN_KEY);
+    if (signedIn) localStorage.setItem(SESSION_KEY, '1');
+    else localStorage.removeItem(SESSION_KEY);
   } catch {
-    /* storage unavailable: session lasts for this tab only */
+    /* storage unavailable: the app asks the server on load instead */
   }
 }
 
@@ -27,13 +37,13 @@ export class ApiError extends Error {
 }
 
 export async function api<T = any>(path: string, options: { method?: string; body?: unknown } = {}): Promise<T> {
-  const token = getToken();
   const res = await fetch(path, {
     method: options.method || (options.body ? 'POST' : 'GET'),
     headers: {
       ...(options.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
+    // Sends the HttpOnly session cookie on same-origin requests.
+    credentials: 'same-origin',
     body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
   });
   let data: any = null;

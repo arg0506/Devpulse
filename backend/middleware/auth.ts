@@ -40,12 +40,35 @@ export function verifyToken(token: string | undefined | null): TokenPayload | nu
   }
 }
 
+/** The session travels in an HttpOnly cookie, so page scripts cannot read or copy it. */
+export const SESSION_COOKIE = 'lemo_session';
+const SESSION_MAX_AGE = 7 * 24 * 60 * 60;
+
+export function readCookie(header: string | undefined, name: string): string | undefined {
+  if (!header) return undefined;
+  for (const part of header.split(';')) {
+    const [key, ...rest] = part.trim().split('=');
+    if (key === name) return decodeURIComponent(rest.join('='));
+  }
+  return undefined;
+}
+
+export function sessionCookie(token: string): string {
+  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+  return `${SESSION_COOKIE}=${encodeURIComponent(token)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${SESSION_MAX_AGE}${secure}`;
+}
+
+export function clearSessionCookie(): string {
+  return `${SESSION_COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0`;
+}
+
 export function authMiddleware(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   const header = req.headers.authorization;
-  if (!header || !header.startsWith('Bearer ')) {
+  const token = header?.startsWith('Bearer ') ? header.slice(7) : readCookie(req.headers.cookie, SESSION_COOKIE);
+  if (!token) {
     return res.status(401).json({ error: 'Sign in to continue.' });
   }
-  const payload = verifyToken(header.slice(7));
+  const payload = verifyToken(token);
   if (!payload) {
     return res.status(401).json({ error: 'Your session has expired. Sign in again.' });
   }
