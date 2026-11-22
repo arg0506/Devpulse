@@ -67,6 +67,8 @@ export interface DevChannel {
   members?: string[];
   /** For community channels: when set, only these roles (and the owner) can see the channel. */
   roleIds?: string[];
+  /** Voice channels hold live audio and video instead of messages. */
+  kind?: 'text' | 'voice';
   communityId?: string;
 }
 

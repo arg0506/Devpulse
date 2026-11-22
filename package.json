@@ -8,7 +8,7 @@
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "start": "cross-env NODE_ENV=production node dist/server.cjs",
     "lint": "tsc --noEmit",
-    "test": "tsx --test tests/permissions.test.ts tests/rateLimit.test.ts tests/history.test.ts tests/uploads.test.ts tests/sessions.test.ts tests/linkPreview.test.ts tests/gifs.test.ts tests/privateChannels.test.ts",
+    "test": "tsx --test tests/permissions.test.ts tests/rateLimit.test.ts tests/history.test.ts tests/uploads.test.ts tests/sessions.test.ts tests/linkPreview.test.ts tests/gifs.test.ts tests/privateChannels.test.ts tests/voice.test.ts",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "postinstall": "prisma generate || echo \"Prisma client not generated; Lemo will use the JSON store.\"",

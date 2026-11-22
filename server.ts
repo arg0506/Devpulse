@@ -16,6 +16,7 @@ import { rateLimit } from './backend/middleware/rateLimit';
 import { uploadsMiddleware } from './backend/uploads';
 import { cachedLinkPreview } from './backend/linkPreview';
 import { gifsEnabled, searchGifs } from './backend/gifs';
+import { iceServers } from './backend/voice';
 import { buildPresenceList } from './backend/realtime';
 import { isGeminiReady } from './backend/gemini';
 
@@ -49,6 +50,10 @@ async function startServer() {
   app.use('/api/payments', paymentsRouter);
   app.use('/api/agents', agentsRouter);
 
+  /** Network servers for voice calls. Signed-in people only, so the list is not public. */
+  app.get('/api/voice/config', authMiddleware, (_req, res) => {
+    res.json({ iceServers: iceServers() });
+  });
   app.get('/api/gifs/status', (_req, res) => {
     res.json({ enabled: gifsEnabled() });
   });

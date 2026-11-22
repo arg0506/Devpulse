@@ -285,7 +285,8 @@ router.post('/:id/channels', authMiddleware, (req: AuthenticatedRequest, res: Re
     .replace(/^-|-$/g, '')
     .slice(0, 32);
   if (name.length < 2) return res.status(400).json({ error: 'Channel names need at least 2 letters or numbers.' });
-  const channel = db.addCommunityChannel(community.id, name, String(req.body?.description || '').slice(0, 140));
+  const kind = req.body?.kind === 'voice' ? 'voice' : 'text';
+  const channel = db.addCommunityChannel(community.id, name, String(req.body?.description || '').slice(0, 140), kind);
   if (!channel) return res.status(404).json({ error: 'That community no longer exists.' });
   getIO()?.emit('channel:new', channel);
   announce(db.findCommunity(community.id)!);

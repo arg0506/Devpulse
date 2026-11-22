@@ -22,6 +22,7 @@ import {
   UserPlus,
 } from 'lucide-react';
 import { SocialModal, useSocial } from './SocialModal';
+import VoiceRoom from './VoiceRoom';
 import { api } from '../lib/api';
 import { hasPermission } from '../lib/permissions';
 import { DevCommunity } from '../types';
@@ -1032,6 +1033,9 @@ export default function ChatWorkspace() {
         </div>
       )}
 
+      {channel?.kind === 'voice' ? (
+        <VoiceRoom channel={channel} />
+      ) : (
       <section className="flex min-w-0 flex-1 flex-col bg-surface">
         <ViewHeader
           leading={
@@ -1191,6 +1195,7 @@ export default function ChatWorkspace() {
           />
         </div>
       </section>
+      )}
 
       {panel === 'thread' && threadMsg && (
         <div className="fixed inset-0 z-40 lg:static lg:z-auto">

@@ -874,10 +874,10 @@ class Database {
     return comm.inviteCode;
   }
 
-  addCommunityChannel(communityId: string, name: string, description: string): DevChannel | undefined {
+  addCommunityChannel(communityId: string, name: string, description: string, kind: 'text' | 'voice' = 'text'): DevChannel | undefined {
     const comm = this.findCommunity(communityId);
     if (!comm) return undefined;
-    const channel = this.createChannel({ name, description, category: 'Guilds', communityId });
+    const channel = this.createChannel({ name, description, category: 'Guilds', communityId, kind });
     comm.channels = [...comm.channels, channel.id];
     this.save();
     return channel;

@@ -8,6 +8,7 @@ import { DevMessage, DevUser, ThreadReply, WhiteboardElement, CodeSnippet } from
 import { hasPermission } from '../frontend/lib/permissions';
 import { saveUpload, deleteUpload } from './uploads';
 import { isAllowedGifUrl } from './gifs';
+import { voiceRooms } from './voice';
 import prisma, { isPrismaEnabled } from './prismaClient';
 
 const MAX_MESSAGE_LENGTH = 8000;
@@ -491,6 +492,50 @@ export function initSockets(server: HTTPServer) {
       pushSocial([userId]);
     });
 
+    // ---------- Voice channels: membership and WebRTC signalling ----------
+
+    function leaveVoice() {
+      const left = voiceRooms.leave(socket.id);
+      if (left) socket.to(`voice:${left}`).emit('voice:peer-left', { socketId: socket.id });
+    }
+
+    socket.on('voice:join', ({ channelId }: { channelId: string }) => {
+      const channel = db.getChannel(String(channelId));
+      if (!channel || channel.kind !== 'voice' || !db.canAccessChannel(channel.id, userId)) {
+        return socket.emit('mod:notice', { text: 'You cannot join that voice channel.' });
+      }
+      const user = me();
+      const previous = voiceRooms.join(channel.id, {
+        socketId: socket.id,
+        userId,
+        username: user.username,
+        avatarEmoji: user.avatarEmoji,
+      });
+      if (previous) socket.to(`voice:${previous}`).emit('voice:peer-left', { socketId: socket.id });
+      socket.join(`voice:${channel.id}`);
+      // The newcomer offers to everyone already there; they answer, so each pair connects once.
+      socket.emit('voice:roster', { channelId: channel.id, peers: voiceRooms.peers(channel.id, socket.id) });
+      socket.to(`voice:${channel.id}`).emit('voice:peer-joined', {
+        socketId: socket.id,
+        userId,
+        username: user.username,
+        avatarEmoji: user.avatarEmoji,
+      });
+    });
+
+    socket.on('voice:leave', () => {
+      const room = voiceRooms.roomOf(socket.id);
+      if (room) socket.leave(`voice:${room}`);
+      leaveVoice();
+    });
+
+    /** Relays an offer, answer or ICE candidate to one peer in the same room. */
+    socket.on('voice:signal', ({ to, data }: { to: string; data: unknown }) => {
+      if (typeof to !== 'string' || !data || typeof data !== 'object') return;
+      if (!voiceRooms.sameRoom(socket.id, to)) return;
+      io.to(to).emit('voice:signal', { from: socket.id, data });
+    });
+
     socket.on('message:edit', ({ messageId, text }: { messageId: string; text: string }) => {
       const msg = db.getMessage(messageId);
       const nextText = String(text || '')
@@ -692,6 +737,7 @@ export function initSockets(server: HTTPServer) {
     });
 
     socket.on('disconnect', () => {
+      leaveVoice();
       const remaining = (connectionCounts.get(userId) || 1) - 1;
       if (remaining <= 0) {
         connectionCounts.delete(userId);

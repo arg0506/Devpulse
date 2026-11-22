@@ -28,6 +28,7 @@ export default function CommunitiesView() {
   const [roleDraft, setRoleDraft] = useState<RoleDraft | null>(null);
   const [roleError, setRoleError] = useState('');
   const [channelName, setChannelName] = useState('');
+  const [channelKind, setChannelKind] = useState<'text' | 'voice'>('text');
   const [panelError, setPanelError] = useState('');
 
   useEffect(() => {
@@ -292,11 +293,15 @@ export default function CommunitiesView() {
                     onSubmit={(e) => {
                       e.preventDefault();
                       run(async () => {
-                        await api(`/api/communities/${selected.id}/channels`, { body: { name: channelName } });
+                        await api(`/api/communities/${selected.id}/channels`, { body: { name: channelName, kind: channelKind } });
                         setChannelName('');
                       });
                     }}
                   >
+                    <select className="field w-28" value={channelKind} onChange={(e) => setChannelKind(e.target.value as 'text' | 'voice')} aria-label="Channel type">
+                      <option value="text">Text</option>
+                      <option value="voice">Voice</option>
+                    </select>
                     <input className="field flex-1" placeholder="new-channel" value={channelName} onChange={(e) => setChannelName(e.target.value)} aria-label="New channel name" />
                     <Button type="submit" disabled={channelName.trim().length < 2}>
                       <Plus size={14} /> Add channel
