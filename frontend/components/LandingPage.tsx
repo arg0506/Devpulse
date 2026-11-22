@@ -185,8 +185,8 @@ export default function LandingPage({ onGetStarted, onSignIn }: LandingPageProps
           }}
         />
         <div className="relative mx-auto max-w-5xl">
-          <div className="animate-fade-up rounded-[28px] bg-[#0b0c10] p-3 shadow-[0_50px_120px_-30px_rgba(47,91,255,0.7)]" style={{ animationDelay: '60ms' }}>
-            <div className="overflow-hidden rounded-[18px] bg-white text-[#0a0b0d]">
+          <div className="animate-fade-up overflow-hidden rounded-[28px] bg-white text-[#0a0b0d] shadow-[0_50px_120px_-30px_rgba(47,91,255,0.7)]" style={{ animationDelay: '60ms' }}>
+            <div className="text-[#0a0b0d]">
               <nav className="flex h-14 items-center justify-between px-6">
                 <Wordmark />
                 <div className="hidden items-center gap-7 text-[12px] text-[#0a0b0d]/75 md:flex">
@@ -246,8 +246,6 @@ export default function LandingPage({ onGetStarted, onSignIn }: LandingPageProps
               </div>
             </div>
           </div>
-          <div aria-hidden="true" className="mx-auto h-10 w-44 rounded-b-2xl bg-[#0b0c10]" />
-          <div aria-hidden="true" className="mx-auto h-2 w-64 rounded-full bg-[#0b0c10]" />
         </div>
       </header>
 
