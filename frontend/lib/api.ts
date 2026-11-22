@@ -53,6 +53,10 @@ export async function api<T = any>(path: string, options: { method?: string; bod
     /* empty body */
   }
   if (!res.ok) {
+    // A 404 with no JSON body means the server answering is not running this version of Lemo (an old process or build).
+    if (res.status === 404 && !data) {
+      throw new ApiError('This server does not have that feature yet. Stop it and start Lemo again (npm run dev) so it runs the latest code.', 404);
+    }
     throw new ApiError(data?.error || `Request failed (${res.status}).`, res.status);
   }
   return data as T;
