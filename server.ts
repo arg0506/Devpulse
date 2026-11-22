@@ -43,6 +43,7 @@ async function startServer() {
   const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10 }, 'Too many attempts. Wait a few minutes and try again.');
   app.use('/api/auth/login', authLimiter);
   app.use('/api/auth/register', authLimiter);
+  app.use('/api/auth/firebase', authLimiter);
   app.use('/uploads', uploadsMiddleware);
   app.use('/api/auth', authRouter);
   app.use('/api/communities', communitiesRouter);

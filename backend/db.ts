@@ -39,6 +39,8 @@ interface Credential {
   passwordHash: string;
   /** Bumped on sign-out so older tokens stop working. */
   sessionVersion?: number;
+  /** The Firebase Authentication user this account belongs to, when signed in with Firebase. */
+  firebaseUid?: string;
 }
 
 interface DatabaseSchema {
@@ -501,6 +503,18 @@ class Database {
   setTimeoutFor(userId: string, until: string | null) {
     if (until) this.data.timeouts[userId] = until;
     else delete this.data.timeouts[userId];
+    this.save();
+  }
+
+  /** The Lemo user linked to a Firebase user id, if any. */
+  findUserIdByFirebaseUid(uid: string): string | undefined {
+    return Object.entries(this.data.credentials).find(([, c]) => c.firebaseUid === uid)?.[0];
+  }
+
+  linkFirebaseUid(userId: string, uid: string) {
+    const credential = this.data.credentials[userId];
+    if (!credential) return;
+    credential.firebaseUid = uid;
     this.save();
   }
 

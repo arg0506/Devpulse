@@ -5,6 +5,7 @@ import { authMiddleware, AuthenticatedRequest, signToken, sessionCookie, clearSe
 import { db } from '../db';
 import { DevUser } from '../../frontend/types';
 import { broadcastPresence, getIO } from '../realtime';
+import { verifyFirebaseIdToken } from '../firebaseAuth';
 
 const router = Router();
 
@@ -125,6 +126,63 @@ router.post('/login', async (req, res) => {
     return res.json({ user: profile });
   } catch (error: any) {
     console.error('[auth] login failed:', error);
+    return res.status(500).json({ error: 'Could not sign in. Try again in a moment.' });
+  }
+});
+
+/** Starts a session from a Firebase Authentication sign-in. Firebase proves who the person is; Lemo keeps the profile. */
+router.post('/firebase', async (req, res) => {
+  const { idToken, username: wantedName, role, avatarEmoji, skills } = req.body || {};
+  if (typeof idToken !== 'string' || !idToken) return res.status(400).json({ error: 'That sign-in is missing its token.' });
+
+  let firebaseUser;
+  try {
+    firebaseUser = await verifyFirebaseIdToken(idToken);
+  } catch {
+    return res.status(401).json({ error: 'That sign-in could not be verified. Try again.' });
+  }
+
+  const signedInAs = (userId: string, status = 200) => {
+    const profile = db.getUser(userId)!;
+    res.setHeader('Set-Cookie', sessionCookie(signToken({ userId, username: profile.username })));
+    return res.status(status).json({ user: profile });
+  };
+
+  try {
+    const linked = db.findUserIdByFirebaseUid(firebaseUser.uid);
+    if (linked) return signedInAs(linked);
+
+    if (firebaseUser.email) {
+      const existing = db.getCredentialByEmail(firebaseUser.email);
+      if (existing) {
+        // Only a verified email may claim an account that already exists, so nobody can take over someone else's.
+        if (!firebaseUser.emailVerified) {
+          return res.status(409).json({ error: 'That email already has an account. Sign in with your password instead.' });
+        }
+        db.linkFirebaseUid(existing.userId, firebaseUser.uid);
+        return signedInAs(existing.userId);
+      }
+    }
+
+    const cleanWanted = typeof wantedName === 'string' ? normaliseUsername(wantedName) : '';
+    if (cleanWanted && (!USERNAME_RE.test(cleanWanted) || db.findUserByUsername(cleanWanted))) {
+      return res.status(409).json({ error: 'That username is unavailable. Pick another.' });
+    }
+    let username = cleanWanted;
+    if (!username) {
+      const seed = normaliseUsername(firebaseUser.name || firebaseUser.email?.split('@')[0] || 'member').replace(/[^a-z0-9_]/g, '').slice(0, 14);
+      username = seed.length >= 3 ? seed : 'member';
+      while (db.findUserByUsername(username)) username = `${seed.slice(0, 12)}${Math.floor(1000 + Math.random() * 9000)}`;
+    }
+
+    const userId = `user-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+    // An empty password hash means this account only signs in through Firebase.
+    db.setCredential(userId, firebaseUser.email || `${firebaseUser.uid}@firebase.local`, '');
+    db.linkFirebaseUid(userId, firebaseUser.uid);
+    db.saveUser(buildProfile(userId, { role, avatarEmoji, skills }, username));
+    return signedInAs(userId, 201);
+  } catch (error: any) {
+    console.error('[auth] firebase sign-in failed:', error);
     return res.status(500).json({ error: 'Could not sign in. Try again in a moment.' });
   }
 });
