@@ -41,6 +41,11 @@ const MESSAGES: Record<string, string> = {
   'auth/popup-closed-by-user': 'The Google sign-in window was closed before it finished.',
   'auth/popup-blocked': 'Your browser blocked the Google sign-in window. Allow pop-ups and try again.',
   'auth/account-exists-with-different-credential': 'That email is already used with another sign-in method.',
+  'auth/operation-not-allowed': 'This sign-in method is not turned on in the Firebase console yet. Turn on Email/Password and Google under Authentication.',
+  'auth/unauthorized-domain': 'This domain is not allowed for sign-in. Add it under Authentication, Settings, Authorized domains in the Firebase console.',
+  'auth/cancelled-popup-request': 'Another sign-in window is already open. Finish it first.',
+  'auth/invalid-api-key': 'The Firebase API key in the app is wrong. Check the Firebase web config.',
+  'auth/app-deleted': 'The Firebase project for this app could not be found.',
 };
 
 /** A friendly message for any sign-in error, Firebase or Lemo. */
