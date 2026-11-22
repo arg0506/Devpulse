@@ -272,7 +272,7 @@ class Database {
   private load() {
     try {
       if (fs.existsSync(DATA_FILE)) {
-        const parsed = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+        const parsed = this.readDataFile();
         this.data = {
           users: parsed.users || {},
           credentials: parsed.credentials || {},
@@ -299,7 +299,14 @@ class Database {
       }
       this.saveNow();
     } catch (err) {
-      console.error('[db] Could not load data file, starting fresh', err);
+      // Never overwrite a file we could not read: move it aside so it can be recovered by hand.
+      if (fs.existsSync(DATA_FILE)) {
+        const quarantine = `${DATA_FILE}.corrupt-${Date.now()}`;
+        fs.renameSync(DATA_FILE, quarantine);
+        console.error(`[db] Data file was unreadable and has been moved to ${quarantine}`, err);
+      } else {
+        console.error('[db] Could not load data file, starting fresh', err);
+      }
       this.saveNow();
     }
   }
@@ -321,11 +328,30 @@ class Database {
     });
   }
 
+  /**
+   * Writes to a temporary file and renames it over the data file, so a crash mid-write
+   * leaves the last good copy in place. The previous version is kept as a .bak file.
+   */
   private saveNow() {
     try {
-      fs.writeFileSync(DATA_FILE, JSON.stringify(this.data, null, 2), 'utf-8');
+      const tmp = `${DATA_FILE}.tmp`;
+      fs.writeFileSync(tmp, JSON.stringify(this.data, null, 2), 'utf-8');
+      if (fs.existsSync(DATA_FILE)) fs.copyFileSync(DATA_FILE, `${DATA_FILE}.bak`);
+      fs.renameSync(tmp, DATA_FILE);
     } catch (err) {
       console.error('[db] Error saving data file', err);
+    }
+  }
+
+  /** Reads the data file, falling back to the last good backup if the main file is damaged. */
+  private readDataFile(): any {
+    try {
+      return JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+    } catch (err) {
+      const backup = `${DATA_FILE}.bak`;
+      if (!fs.existsSync(backup)) throw err;
+      console.warn('[db] Data file unreadable, loading the last good backup');
+      return JSON.parse(fs.readFileSync(backup, 'utf-8'));
     }
   }
 
