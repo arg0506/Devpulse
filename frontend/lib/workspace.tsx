@@ -2,7 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { socket } from '../socket';
 import { ChatPresence, DevChannel, DevUser } from '../types';
 
-export type View = 'chat' | 'communities' | 'events' | 'board' | 'agents';
+export type View = 'overview' | 'chat' | 'communities' | 'events' | 'board' | 'agents';
 export type Theme = 'light' | 'dark';
 
 interface WorkspaceValue {
@@ -67,7 +67,7 @@ export function WorkspaceProvider({
   const [connected, setConnected] = useState(false);
   const [channels, setChannels] = useState<DevChannel[]>([]);
   const [presences, setPresences] = useState<ChatPresence[]>([]);
-  const [view, setView] = useState<View>('chat');
+  const [view, setView] = useState<View>('overview');
   const [activeChannelId, setActiveChannelId] = useState(() => localStorage.getItem('devpulse_channel') || 'general');
   const [unread, setUnread] = useState<Record<string, number>>({});
   const [beats, setBeats] = useState<number[]>([]);

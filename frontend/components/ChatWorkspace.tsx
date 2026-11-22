@@ -15,7 +15,16 @@ import {
   Sparkles,
   CalendarDays,
   PenSquare,
+  Paperclip,
+  Smile,
+  Pencil,
+  CornerUpLeft,
+  UserPlus,
 } from 'lucide-react';
+import { SocialModal, useSocial } from './SocialModal';
+import { api } from '../lib/api';
+import { hasPermission } from '../lib/permissions';
+import { DevCommunity } from '../types';
 import { socket } from '../socket';
 import { useWorkspace, channelLabel } from '../lib/workspace';
 import { DevChannel, DevMessage, ThreadReply } from '../types';
@@ -28,7 +37,17 @@ const LANGUAGES = ['typescript', 'javascript', 'python', 'rust', 'go', 'sql', 'h
 
 // ---------- Sidebar ----------
 
-function Sidebar({ onNewChannel, onNewDM, onNavigate }: { onNewChannel: () => void; onNewDM: () => void; onNavigate: () => void }) {
+function Sidebar({
+  onNewChannel,
+  onNewDM,
+  onNavigate,
+  onSocial,
+}: {
+  onNewChannel: () => void;
+  onNewDM: () => void;
+  onNavigate: () => void;
+  onSocial: () => void;
+}) {
   const { channels, activeChannelId, openChannel, unread, user, presenceOf } = useWorkspace();
   const rooms = channels.filter((c) => c.category === 'Channels' || c.category === 'Guilds');
   const dms = channels.filter((c) => c.category === 'Direct Messages');
@@ -46,7 +65,7 @@ function Sidebar({ onNewChannel, onNewDM, onNavigate }: { onNewChannel: () => vo
           }}
           className={cx(
             'group flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] transition-colors',
-            active ? 'bg-subtle font-medium text-ink' : count ? 'font-medium text-ink hover:bg-subtle' : 'text-ink-2 hover:bg-subtle hover:text-ink',
+            active ? 'brand-gradient font-semibold text-[#0a0b0d]' : count ? 'font-medium text-ink hover:bg-subtle' : 'text-ink-2 hover:bg-subtle hover:text-ink',
           )}
         >
           {icon}
@@ -60,12 +79,17 @@ function Sidebar({ onNewChannel, onNewDM, onNavigate }: { onNewChannel: () => vo
   };
 
   return (
-    <div className="flex h-full w-[248px] flex-col border-r border-line bg-surface">
+    <div className="m-2 mr-0 flex h-[calc(100%-1rem)] w-[248px] flex-col overflow-hidden rounded-2xl border border-line bg-surface">
       <div className="flex h-14 flex-shrink-0 items-center justify-between border-b border-line px-4">
-        <span className="font-display text-[15px] font-semibold tracking-[-0.01em]">Chat</span>
-        <IconButton label="New direct message" onClick={onNewDM}>
+        <span className="font-display text-[19px] font-extrabold tracking-[-0.03em]">Chat</span>
+        <div className="flex items-center">
+          <IconButton label="Friends and moderation" onClick={onSocial}>
+            <UserPlus size={15} />
+          </IconButton>
+          <IconButton label="New direct message" onClick={onNewDM}>
           <PenSquare size={15} />
-        </IconButton>
+          </IconButton>
+        </div>
       </div>
       <div className="flex-1 overflow-y-auto px-2 py-3">
         <div className="mb-1 flex items-center justify-between px-2">
@@ -144,17 +168,43 @@ function Reactions({ msg, onToggle }: { msg: DevMessage; onToggle: (emoji: strin
   );
 }
 
-function MessageRow({ msg, compact, onThread }: { msg: DevMessage; compact: boolean; onThread: (m: DevMessage) => void }) {
+function MessageRow({
+  msg,
+  compact,
+  onThread,
+  onReply,
+  canModerate,
+}: {
+  msg: DevMessage;
+  compact: boolean;
+  onThread: (m: DevMessage) => void;
+  onReply?: (m: DevMessage) => void;
+  canModerate?: boolean;
+}) {
   const { user, showProfile } = useWorkspace();
   const [picker, setPicker] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(msg.text);
   const mine = msg.userId === user.id;
+  const mentionsMe = !!msg.mentions?.includes(user.username);
   const react = (emoji: string) => {
     socket.emit('message:react', { messageId: msg.id, emoji });
     setPicker(false);
   };
+  const saveEdit = () => {
+    const next = draft.trim();
+    if (next && next !== msg.text) socket.emit('message:edit', { messageId: msg.id, text: next });
+    setEditing(false);
+  };
 
   return (
-    <div className={cx('group relative flex gap-3 px-5 hover:bg-subtle/60', compact ? 'py-0.5' : 'pt-3 pb-0.5')}>
+    <div
+      className={cx(
+        'group relative flex gap-3 px-5 hover:bg-subtle/60',
+        compact ? 'py-0.5' : 'pt-3 pb-0.5',
+        mentionsMe && 'bg-[#ffd23f]/10 hover:bg-[#ffd23f]/15',
+      )}
+    >
       <div className="w-8 flex-shrink-0">
         {!compact ? (
           <button type="button" onClick={() => showProfile(msg.userId)} aria-label={`View @${msg.username}`}>
@@ -179,7 +229,53 @@ function MessageRow({ msg, compact, onThread }: { msg: DevMessage; compact: bool
             )}
           </div>
         )}
-        {msg.text && <Markdown text={msg.text} />}
+        {msg.replyTo && (
+          <div className="mb-1 flex min-w-0 items-center gap-1.5 border-l-2 border-line-strong pl-2 text-[12px] text-ink-3">
+            <CornerUpLeft size={12} className="flex-shrink-0" />
+            <span className="font-semibold text-ink-2">@{msg.replyTo.username}</span>
+            <span className="truncate">{msg.replyTo.text}</span>
+          </div>
+        )}
+        {editing ? (
+          <div className="mt-1">
+            <textarea
+              autoFocus
+              rows={2}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  saveEdit();
+                }
+                if (e.key === 'Escape') setEditing(false);
+              }}
+              className="w-full resize-none rounded-lg border border-line bg-canvas px-3 py-2 text-[14px] focus:border-line-strong focus:outline-none"
+            />
+            <p className="mt-1 text-[11.5px] text-ink-3">
+              Enter to save · Escape to cancel
+            </p>
+          </div>
+        ) : (
+          msg.text && (
+            <>
+              <Markdown text={msg.text} />
+              {msg.editedAt && <span className="ml-1 text-[11px] text-ink-3">(edited)</span>}
+            </>
+          )
+        )}
+        {msg.attachment &&
+          (msg.attachment.type.startsWith('image/') ? (
+            <img src={msg.attachment.dataUrl} alt={msg.attachment.name} className="mt-2 max-h-72 rounded-xl border border-line object-contain" />
+          ) : (
+            <a
+              href={msg.attachment.dataUrl}
+              download={msg.attachment.name}
+              className="mt-2 inline-flex items-center gap-2 rounded-xl border border-line bg-subtle px-3 py-2 text-[13px] font-medium hover:border-line-strong"
+            >
+              <Paperclip size={14} /> {msg.attachment.name}
+            </a>
+          ))}
         {msg.codeSnippet && <CodeBlock code={msg.codeSnippet.code} language={msg.codeSnippet.language} title={msg.codeSnippet.title} />}
         <Reactions msg={msg} onToggle={react} />
         {msg.repliesCount > 0 && (
@@ -221,17 +317,43 @@ function MessageRow({ msg, compact, onThread }: { msg: DevMessage; compact: bool
             <IconButton label="Add reaction" className="h-7 w-7" onClick={() => setPicker(true)}>
               <SmilePlus size={14} />
             </IconButton>
+            {onReply && (
+              <IconButton label="Reply" className="h-7 w-7" onClick={() => onReply(msg)}>
+                <CornerUpLeft size={14} />
+              </IconButton>
+            )}
             <IconButton label="Reply in thread" className="h-7 w-7" onClick={() => onThread(msg)}>
               <MessageSquare size={14} />
             </IconButton>
             <IconButton label={msg.isPinned ? 'Unpin' : 'Pin'} className="h-7 w-7" onClick={() => socket.emit('message:pin', { messageId: msg.id })}>
               <Pin size={14} />
             </IconButton>
+            {mine && msg.text && (
+              <IconButton
+                label="Edit message"
+                className="h-7 w-7"
+                onClick={() => {
+                  setDraft(msg.text);
+                  setEditing(true);
+                }}
+              >
+                <Pencil size={14} />
+              </IconButton>
+            )}
             {mine && (
               <IconButton
                 label="Delete message"
                 className="h-7 w-7 hover:text-err"
                 onClick={() => confirm('Delete this message?') && socket.emit('message:delete', { messageId: msg.id })}
+              >
+                <Trash2 size={14} />
+              </IconButton>
+            )}
+            {canModerate && !mine && (
+              <IconButton
+                label="Delete message as moderator"
+                className="h-7 w-7 text-err hover:text-err"
+                onClick={() => confirm(`Delete @${msg.username}'s message as a moderator?`) && socket.emit('mod:delete', { messageId: msg.id })}
               >
                 <Trash2 size={14} />
               </IconButton>
@@ -245,21 +367,47 @@ function MessageRow({ msg, compact, onThread }: { msg: DevMessage; compact: bool
 
 // ---------- Composer ----------
 
+type Attachment = { name: string; type: string; dataUrl: string };
+type SendExtra = { attachment?: Attachment; replyToId?: string };
+
+const EMOJI_PALETTE = ['😀', '😂', '🥹', '😎', '🤔', '🙌', '👏', '🔥', '🚀', '🎉', '💯', '✅', '❌', '⚡', '🐛', '🛠️', '💡', '👀', '❤️', '🙏', '👍', '👎', '😅', '🤝'];
+const MAX_ATTACHMENT_BYTES = 500_000;
+
 function Composer({
   placeholder,
   onSend,
   onSnippet,
   onTyping,
   autoFocusKey,
+  replyTo,
+  onCancelReply,
 }: {
   placeholder: string;
-  onSend: (text: string) => void;
+  onSend: (text: string, extra?: SendExtra) => void;
   onSnippet?: () => void;
   onTyping?: () => void;
   autoFocusKey?: string;
+  replyTo?: DevMessage | null;
+  onCancelReply?: () => void;
 }) {
   const [text, setText] = useState('');
+  const [attachment, setAttachment] = useState<Attachment | null>(null);
+  const [attachError, setAttachError] = useState('');
+  const [emojiOpen, setEmojiOpen] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
   const ref = useRef<HTMLTextAreaElement>(null);
+
+  const pickFile = (file: File | undefined) => {
+    setAttachError('');
+    if (!file) return;
+    if (/^(text\/html|application\/xhtml|image\/svg\+xml|application\/xml|text\/xml)$/i.test(file.type)) {
+      return setAttachError('That file type cannot be shared.');
+    }
+    if (file.size > MAX_ATTACHMENT_BYTES) return setAttachError('Files must be 500 KB or smaller.');
+    const reader = new FileReader();
+    reader.onload = () => setAttachment({ name: file.name, type: file.type, dataUrl: String(reader.result) });
+    reader.readAsDataURL(file);
+  };
 
   useLayoutEffect(() => {
     const el = ref.current;
@@ -274,13 +422,59 @@ function Composer({
 
   const submit = () => {
     const t = text.trim();
-    if (!t) return;
-    onSend(t);
+    if (!t && !attachment) return;
+    onSend(t, { attachment: attachment ?? undefined, replyToId: replyTo?.id });
     setText('');
+    setAttachment(null);
+    setAttachError('');
+    onCancelReply?.();
   };
 
   return (
     <div className="rounded-xl border border-line bg-surface transition-colors focus-within:border-line-strong">
+      {replyTo && (
+        <div className="flex items-center justify-between gap-2 border-b border-line px-3.5 py-2 text-[12px] text-ink-3">
+          <span className="flex min-w-0 items-center gap-1.5">
+            <CornerUpLeft size={12} className="flex-shrink-0" />
+            Replying to <span className="font-semibold text-ink-2">@{replyTo.username}</span>
+            <span className="truncate">{replyTo.text}</span>
+          </span>
+          <IconButton label="Cancel reply" className="h-6 w-6" onClick={() => onCancelReply?.()}>
+            <X size={13} />
+          </IconButton>
+        </div>
+      )}
+      {attachment && (
+        <div className="flex items-center gap-3 px-3.5 pt-3">
+          {attachment.type.startsWith('image/') ? (
+            <img src={attachment.dataUrl} alt={attachment.name} className="h-16 w-16 rounded-lg border border-line object-cover" />
+          ) : (
+            <span className="flex h-16 w-16 items-center justify-center rounded-lg border border-line bg-subtle">
+              <Paperclip size={18} />
+            </span>
+          )}
+          <span className="min-w-0 flex-1 truncate text-[12px] text-ink-3">{attachment.name}</span>
+          <IconButton label="Remove image" className="h-6 w-6" onClick={() => setAttachment(null)}>
+            <X size={13} />
+          </IconButton>
+        </div>
+      )}
+      {attachError && <p className="px-3.5 pt-2 text-[12px] text-err">{attachError}</p>}
+      {emojiOpen && (
+        <div className="grid grid-cols-8 gap-0.5 border-b border-line px-2 py-2 sm:grid-cols-12">
+          {EMOJI_PALETTE.map((e) => (
+            <button
+              key={e}
+              type="button"
+              onClick={() => setText((t) => t + e)}
+              className="h-8 w-8 rounded-md text-[17px] hover:bg-subtle"
+              aria-label={`Insert ${e}`}
+            >
+              {e}
+            </button>
+          ))}
+        </div>
+      )}
       <textarea
         ref={ref}
         rows={1}
@@ -306,6 +500,21 @@ function Composer({
               <Code2 size={15} />
             </IconButton>
           )}
+          <IconButton label="Attach a file" onClick={() => fileRef.current?.click()}>
+            <Paperclip size={15} />
+          </IconButton>
+          <input
+            ref={fileRef}
+            type="file"
+            className="hidden"
+            onChange={(e) => {
+              pickFile(e.target.files?.[0]);
+              e.target.value = '';
+            }}
+          />
+          <IconButton label="Emoji" onClick={() => setEmojiOpen((o) => !o)}>
+            <Smile size={15} />
+          </IconButton>
           <span className="ml-1 hidden text-[11.5px] text-ink-3 sm:inline">
             <span className="font-mono">**bold**</span> · <span className="font-mono">`code`</span> · <span className="font-mono">```</span> blocks ·
             Shift + Enter for a new line
@@ -314,8 +523,8 @@ function Composer({
         <IconButton
           label="Send"
           onClick={submit}
-          disabled={!text.trim()}
-          className={cx(text.trim() && 'bg-ink text-inverse hover:bg-ink hover:text-inverse')}
+          disabled={!text.trim() && !attachment}
+          className={cx((text.trim() || attachment) && 'bg-ink text-inverse hover:bg-ink hover:text-inverse')}
         >
           <SendHorizontal size={15} />
         </IconButton>
@@ -455,6 +664,11 @@ export default function ChatWorkspace() {
   const [newChannel, setNewChannel] = useState({ name: '', description: '', error: '' });
   const [dmModal, setDmModal] = useState(false);
   const [dmQuery, setDmQuery] = useState('');
+  const [replyTo, setReplyTo] = useState<DevMessage | null>(null);
+  const [mention, setMention] = useState<{ channelId: string; from: string; text: string } | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [socialOpen, setSocialOpen] = useState(false);
+  const social = useSocial();
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
@@ -466,6 +680,26 @@ export default function ChatWorkspace() {
   const isDM = channel?.category === 'Direct Messages';
   const isEvent = channel?.category === 'Events' || activeChannelId.startsWith('event-');
 
+  // The community this channel belongs to, so its moderators can delete messages here.
+  const [community, setCommunity] = useState<DevCommunity | undefined>();
+  useEffect(() => {
+    const id = channel?.communityId;
+    if (!id) {
+      setCommunity(undefined);
+      return;
+    }
+    api<DevCommunity[]>('/api/communities')
+      .then((list) => setCommunity(list.find((c) => c.id === id)))
+      .catch(() => undefined);
+    const upsert = (c: DevCommunity) => {
+      if (c.id === id) setCommunity(c);
+    };
+    socket.on('community:update', upsert);
+    return () => {
+      socket.off('community:update', upsert);
+    };
+  }, [channel?.communityId]);
+
   // Join the active channel (and re-join after reconnects).
   useEffect(() => {
     const join = () => socket.emit('user:join-channel', { channelId: activeChannelId });
@@ -473,6 +707,7 @@ export default function ChatWorkspace() {
     setLoadedFor(null);
     setTyping({});
     setThreadMsg(null);
+    setReplyTo(null);
     setPanel((p) => (p === 'thread' ? 'none' : p));
     setPinnedOnly(false);
     stickToBottom.current = true;
@@ -525,6 +760,18 @@ export default function ChatWorkspace() {
     };
   }, [activeChannelId, user.id]);
 
+  // Mentions and moderation notices arrive on the personal room, whichever channel is open.
+  useEffect(() => {
+    const onMention = (m: { channelId: string; from: string; text: string }) => setMention(m);
+    const onNotice = ({ text }: { text: string }) => setNotice(text);
+    socket.on('notification:mention', onMention);
+    socket.on('mod:notice', onNotice);
+    return () => {
+      socket.off('notification:mention', onMention);
+      socket.off('mod:notice', onNotice);
+    };
+  }, []);
+
   // Keep the view pinned to the newest message unless the reader scrolled up.
   useLayoutEffect(() => {
     const el = scrollRef.current;
@@ -550,10 +797,10 @@ export default function ChatWorkspace() {
     typingTimer.current = setTimeout(stopTyping, 2000);
   };
 
-  const send = (text: string) => {
+  const send = (text: string, extra?: SendExtra) => {
     stopTyping();
     stickToBottom.current = true;
-    socket.emit('message:send', { channelId: activeChannelId, text });
+    socket.emit('message:send', { channelId: activeChannelId, text, ...extra });
   };
 
   const sendSnippet = (e: React.FormEvent) => {
@@ -585,13 +832,14 @@ export default function ChatWorkspace() {
 
   const visible = useMemo(() => {
     let list = messages;
+    if (social.blocked.length) list = list.filter((m) => !social.blocked.some((b) => b.id === m.userId));
     if (pinnedOnly) list = list.filter((m) => m.isPinned);
     if (filter.trim()) {
       const q = filter.toLowerCase();
       list = list.filter((m) => m.text.toLowerCase().includes(q) || m.username.includes(q) || m.codeSnippet?.code.toLowerCase().includes(q));
     }
     return list;
-  }, [messages, pinnedOnly, filter]);
+  }, [messages, pinnedOnly, filter, social.blocked]);
 
   const typingNames = Object.values(typing);
   const dmCandidates = presences.filter((p) => p.userId !== user.id && p.userId !== 'system-bot' && p.username.includes(dmQuery.toLowerCase()));
@@ -608,12 +856,17 @@ export default function ChatWorkspace() {
     <div className="flex min-w-0 flex-1">
       {/* Sidebar: inline on desktop, overlay on small screens */}
       <div className="hidden md:block">
-        <Sidebar onNewChannel={() => setChannelModal(true)} onNewDM={() => setDmModal(true)} onNavigate={() => undefined} />
+        <Sidebar onNewChannel={() => setChannelModal(true)} onNewDM={() => setDmModal(true)} onNavigate={() => undefined} onSocial={() => setSocialOpen(true)} />
       </div>
       {mobileSidebar && (
         <div className="fixed inset-0 z-50 flex md:hidden" onClick={() => setMobileSidebar(false)}>
           <div className="h-full shadow-pop" onClick={(e) => e.stopPropagation()}>
-            <Sidebar onNewChannel={() => setChannelModal(true)} onNewDM={() => setDmModal(true)} onNavigate={() => setMobileSidebar(false)} />
+            <Sidebar
+              onNewChannel={() => setChannelModal(true)}
+              onNewDM={() => setDmModal(true)}
+              onNavigate={() => setMobileSidebar(false)}
+              onSocial={() => setSocialOpen(true)}
+            />
           </div>
           <div className="flex-1 bg-ink/20" />
         </div>
@@ -712,12 +965,43 @@ export default function ChatWorkspace() {
                     <span className="h-px flex-1 bg-line" />
                   </div>
                 )}
-                <MessageRow msg={m} compact={compact} onThread={openThread} />
+                <MessageRow
+                  msg={m}
+                  compact={compact}
+                  onThread={openThread}
+                  onReply={setReplyTo}
+                  canModerate={social.isAdmin || hasPermission(community, user.id, 'manage_messages')}
+                />
               </React.Fragment>
             );
           })}
         </div>
 
+        {notice && (
+          <div className="mx-4 mb-2 flex items-center gap-2 rounded-xl border border-err/40 bg-err/10 px-3.5 py-2 text-[12.5px]">
+            <span className="min-w-0 flex-1 truncate">{notice}</span>
+            <IconButton label="Dismiss notice" className="h-6 w-6" onClick={() => setNotice(null)}>
+              <X size={13} />
+            </IconButton>
+          </div>
+        )}
+        {mention && mention.channelId !== activeChannelId && (
+          <div className="mx-4 mb-2 flex items-center gap-2 rounded-xl border border-[#ffd23f]/40 bg-[#ffd23f]/10 px-3.5 py-2 text-[12.5px]">
+            <button
+              type="button"
+              onClick={() => {
+                openChannel(mention.channelId);
+                setMention(null);
+              }}
+              className="min-w-0 flex-1 truncate text-left"
+            >
+              <span className="font-semibold">@{mention.from}</span> mentioned you: <span className="text-ink-2">{mention.text}</span>
+            </button>
+            <IconButton label="Dismiss mention" className="h-6 w-6" onClick={() => setMention(null)}>
+              <X size={13} />
+            </IconButton>
+          </div>
+        )}
         <div className="px-4 pb-4">
           <p className="h-5 px-1 text-[12px] text-ink-3" aria-live="polite">
             {typingNames.length > 0 && (
@@ -735,6 +1019,8 @@ export default function ChatWorkspace() {
             onSend={send}
             onTyping={noteTyping}
             onSnippet={() => setSnippetOpen(true)}
+            replyTo={replyTo}
+            onCancelReply={() => setReplyTo(null)}
           />
         </div>
       </section>
@@ -750,6 +1036,7 @@ export default function ChatWorkspace() {
         </div>
       )}
 
+      <SocialModal open={socialOpen} onClose={() => setSocialOpen(false)} />
       <Modal
         open={snippetOpen}
         onClose={() => setSnippetOpen(false)}

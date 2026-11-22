@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { MessagesSquare, Users, CalendarDays, PenTool, Workflow, SquareTerminal, Sun, Moon, Search } from 'lucide-react';
+import { MessagesSquare, Users, CalendarDays, PenTool, Workflow, SquareTerminal, Sun, Moon, Search, LayoutGrid } from 'lucide-react';
 import { useWorkspace, View } from '../lib/workspace';
-import { Avatar, Kbd, PulseMark, cx } from './ui';
+import { Avatar, Kbd, LemoMark, cx } from './ui';
 import ChatWorkspace from './ChatWorkspace';
+import OverviewView from './OverviewView';
 import CommunitiesView from './CommunitiesView';
 import EventsView from './EventsView';
 import Whiteboard from './Whiteboard';
@@ -12,12 +13,14 @@ import CheckoutModal from './CheckoutModal';
 import CommandPalette from './CommandPalette';
 import { SettingsModal, UserCardModal } from './ProfileModals';
 
-const NAV: { view: View; label: string; icon: typeof MessagesSquare }[] = [
-  { view: 'chat', label: 'Chat', icon: MessagesSquare },
-  { view: 'communities', label: 'Communities', icon: Users },
-  { view: 'events', label: 'Events', icon: CalendarDays },
-  { view: 'board', label: 'Whiteboard', icon: PenTool },
-  { view: 'agents', label: 'Agent studio', icon: Workflow },
+// Each section has its own colour; the active one fills with it.
+const NAV: { view: View; label: string; icon: typeof MessagesSquare; color: string }[] = [
+  { view: 'overview', label: 'Overview', icon: LayoutGrid, color: '#ff6670' },
+  { view: 'chat', label: 'Chat', icon: MessagesSquare, color: '#ffd23f' },
+  { view: 'communities', label: 'Communities', icon: Users, color: '#ff8fc7' },
+  { view: 'events', label: 'Events', icon: CalendarDays, color: '#3ddc97' },
+  { view: 'board', label: 'Whiteboard', icon: PenTool, color: '#7cc4ff' },
+  { view: 'agents', label: 'Agent studio', icon: Workflow, color: '#b49cff' },
 ];
 
 function Rail() {
@@ -26,12 +29,12 @@ function Rail() {
   const status = presenceOf(user.id)?.status || 'online';
 
   return (
-    <nav aria-label="Workspace" className="flex w-14 flex-shrink-0 flex-col items-center justify-between border-r border-line bg-surface py-3">
+    <nav aria-label="Workspace" className="m-2 flex w-14 flex-shrink-0 flex-col items-center justify-between rounded-full border border-line bg-surface py-3">
       <div className="flex flex-col items-center gap-1">
         <div className="mb-3">
-          <PulseMark size={28} />
+          <LemoMark size={28} />
         </div>
-        {NAV.map(({ view: v, label, icon: Icon }) => (
+        {NAV.map(({ view: v, label, icon: Icon, color }) => (
           <button
             key={v}
             type="button"
@@ -39,9 +42,10 @@ function Rail() {
             aria-label={label}
             aria-current={view === v ? 'page' : undefined}
             title={label}
+            style={view === v ? { backgroundColor: color } : undefined}
             className={cx(
-              'relative flex h-10 w-10 items-center justify-center rounded-xl transition-colors',
-              view === v ? 'bg-subtle text-ink' : 'text-ink-3 hover:bg-subtle hover:text-ink',
+              'relative flex h-10 w-10 items-center justify-center rounded-full transition-all duration-200 hover:-translate-y-0.5',
+              view === v ? 'scale-110 text-[#0a0b0d] shadow-[0_6px_18px_-6px_rgba(0,0,0,0.8)]' : 'text-ink-3 hover:bg-subtle hover:text-ink',
             )}
           >
             <Icon size={18} strokeWidth={view === v ? 2.1 : 1.8} />
@@ -178,6 +182,7 @@ export default function Shell() {
         <Rail />
         <main className="flex min-w-0 flex-1 flex-col">
           <div className="relative min-h-0 flex-1">
+            {pane('overview', <OverviewView />)}
             {pane('chat', <ChatWorkspace />)}
             {pane('communities', <CommunitiesView />)}
             {pane('events', <EventsView />)}
