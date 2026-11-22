@@ -2,17 +2,17 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   ArrowRight,
   Building2,
-  CalendarDays,
   Check,
-  Code2,
   Database,
   Hash,
   KeyRound,
   PenTool,
   Rocket,
   Server,
+  Link2,
+  Shield,
   Sprout,
-  SquareTerminal,
+  Users,
   Webhook,
   Workflow,
 } from 'lucide-react';
@@ -509,25 +509,25 @@ const FEATURES = [
     tag: 'agents',
   },
   {
-    icon: SquareTerminal,
-    title: 'Command console',
-    body: 'Press Ctrl + ` from anywhere for stats, who is online, upcoming events and a direct line to Gemini.',
+    icon: Users,
+    title: 'Communities with roles',
+    body: 'Servers with owners, custom roles and permissions, invite links, and channels that only chosen roles can see.',
     color: COLOR.green,
-    tag: 'console',
+    tag: 'communities',
   },
   {
-    icon: Code2,
-    title: 'Runnable code',
-    body: 'Fenced code blocks with syntax highlighting. JavaScript snippets run in an isolated Web Worker with a 4 second limit.',
+    icon: Link2,
+    title: 'Rich messages',
+    body: 'Replies, edits, @mentions, file uploads, GIFs, link previews and slash commands like /roll and /poll.',
     color: COLOR.pink,
-    tag: 'snippets',
+    tag: 'messages',
   },
   {
-    icon: CalendarDays,
-    title: 'Communities and events',
-    body: 'Join communities with their own channels. Schedule events with a call link, RSVP and open a discussion per event.',
+    icon: Shield,
+    title: 'Moderation you can trust',
+    body: 'Friends and blocking for you. Timeouts, bans and an audit log for the people who keep a community healthy.',
     color: COLOR.orange,
-    tag: 'community',
+    tag: 'safety',
   },
 ];
 
@@ -643,6 +643,18 @@ const FAQS = [
   {
     q: 'Do workflows run on a schedule?',
     a: 'Not yet. Workflows run when you press Run in the studio, using the trigger test input. Scheduled and incoming-webhook triggers need a server-side runner, which is the next step.',
+  },
+  {
+    q: 'Can I hide a channel from some people?',
+    a: 'Yes. In a community you can limit a channel to chosen roles. Everyone else cannot see it, join it, read it or post in it.',
+  },
+  {
+    q: 'Do GIFs and link previews work?',
+    a: 'Both are optional. GIF search turns on when the server has a Tenor API key. Link previews only fetch public web pages; private and internal addresses are refused.',
+  },
+  {
+    q: 'Is my session safe in the browser?',
+    a: 'Sessions live in an HttpOnly cookie that page scripts cannot read. Signing out ends the session on every device, and sign-in is rate limited against guessing.',
   },
 ];
 
