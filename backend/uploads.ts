@@ -64,3 +64,15 @@ export const uploadsMiddleware = express.static(UPLOAD_DIR, {
     if (!INLINE_EXTENSIONS.has(ext)) res.setHeader('Content-Disposition', 'attachment');
   },
 });
+
+/** Photos for profiles and groups: only the common image formats, and never HTML or SVG. */
+export function saveImage(dataUrl: string, name: string): StoredFile | undefined {
+  const match = /^data:(image\/(?:png|jpeg|gif|webp));base64,/.exec(dataUrl);
+  if (!match) return undefined;
+  return saveUpload(dataUrl, name, match[1]);
+}
+
+/** True when a value is a photo this server stored, so a user can't point an avatar at anything else. */
+export function isOwnImageUrl(value: unknown): value is string {
+  return typeof value === 'string' && /^\/uploads\/[a-f0-9]{32}\.(png|jpg|gif|webp)$/.test(value);
+}

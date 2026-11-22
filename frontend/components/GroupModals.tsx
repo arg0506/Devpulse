@@ -5,6 +5,14 @@ import { useWorkspace } from '../lib/workspace';
 import { DevChannel } from '../types';
 import { Avatar, Button, Modal, cx } from './ui';
 
+/** A group's picture: its uploaded photo, or its emoji. */
+export function ChannelGlyph({ icon, size = 18 }: { icon?: string; size?: number }) {
+  if (icon?.startsWith('/uploads/')) {
+    return <img src={icon} alt="" draggable={false} style={{ width: size, height: size }} className="rounded-md object-cover" />;
+  }
+  return <span className="flex items-center justify-center leading-none" style={{ width: size, height: size, fontSize: size * 0.8 }}>{icon || '👥'}</span>;
+}
+
 /** Lets someone start a new group with people who are online, as WhatsApp does. */
 export function CreateGroupModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { user, presences, openChannel } = useWorkspace();
@@ -104,6 +112,31 @@ export function GroupInfoModal({ open, onClose, channel }: { open: boolean; onCl
             <p className="font-mono text-[11px] tracking-[0.14em] text-ink-3 uppercase">Group details</p>
             <input className="field" value={name} maxLength={40} onChange={(e) => setName(e.target.value)} aria-label="Group name" />
             <textarea className="field resize-none" rows={2} maxLength={200} value={description} onChange={(e) => setDescription(e.target.value)} aria-label="Description" />
+            <div className="flex items-center gap-3">
+              <ChannelGlyph icon={channel.icon} size={40} />
+              <label className="cursor-pointer rounded-lg border border-line px-3 py-2 text-[12.5px] font-semibold hover:bg-subtle">
+                Change group photo
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/gif,image/webp"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = '';
+                    if (!file) return;
+                    if (file.size > 500000) return setError('Photos must be 500 KB or smaller.');
+                    const reader = new FileReader();
+                    reader.onload = () => run('group:update', { channelId: channel.id, icon: String(reader.result) });
+                    reader.readAsDataURL(file);
+                  }}
+                />
+              </label>
+              {channel.icon?.startsWith('/uploads/') && (
+                <button type="button" onClick={() => run('group:update', { channelId: channel.id, icon: '👥' })} className="text-[12.5px] font-semibold text-err">
+                  Remove photo
+                </button>
+              )}
+            </div>
             <div className="flex items-center justify-between gap-3">
               <label className="flex items-center gap-2 text-[13px]">
                 <input type="checkbox" checked={!!channel.adminOnly} onChange={(e) => run('group:update', { channelId: channel.id, adminOnly: e.target.checked })} />

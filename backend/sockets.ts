@@ -6,7 +6,7 @@ import { generateText, isGeminiReady, GEMINI_MODEL } from './gemini';
 import { setIO, connectionCounts, broadcastPresence } from './realtime';
 import { DevMessage, DevUser, ThreadReply, WhiteboardElement, CodeSnippet } from '../frontend/types';
 import { hasPermission } from '../frontend/lib/permissions';
-import { saveUpload, deleteUpload } from './uploads';
+import { saveUpload, saveImage, deleteUpload } from './uploads';
 import { isAllowedGifUrl } from './gifs';
 import { voiceRooms } from './voice';
 import prisma, { isPrismaEnabled } from './prismaClient';
@@ -563,7 +563,14 @@ export function initSockets(server: HTTPServer) {
       if (typeof name === 'string' && name.trim()) patch.name = name.trim().slice(0, 40);
       if (typeof description === 'string') patch.description = description.slice(0, 200);
       if (typeof adminOnly === 'boolean') patch.adminOnly = adminOnly;
-      if (typeof icon === 'string' && icon.length <= 8) patch.icon = icon;
+      if (typeof icon === 'string' && icon.startsWith('data:image/')) {
+        const stored = saveImage(icon, 'group');
+        if (!stored) return ack?.({ error: 'Choose a PNG, JPEG, GIF or WebP photo under 500 KB.' });
+        deleteUpload(db.getChannel(String(channelId))?.icon);
+        patch.icon = stored.url;
+      } else if (typeof icon === 'string' && icon.length <= 8) {
+        patch.icon = icon;
+      }
       const group = db.updateGroup(String(channelId), patch);
       if (!group) return ack?.({ error: 'That group no longer exists.' });
       announceGroup(group.id, group.members || []);

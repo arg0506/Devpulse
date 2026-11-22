@@ -6,6 +6,7 @@ import { db } from '../db';
 import { DevUser } from '../../frontend/types';
 import { broadcastPresence, getIO } from '../realtime';
 import { verifyFirebaseIdToken } from '../firebaseAuth';
+import { saveImage, deleteUpload, isOwnImageUrl } from '../uploads';
 
 const router = Router();
 
@@ -209,11 +210,35 @@ router.get('/profile', authMiddleware, (req: AuthenticatedRequest, res: Response
   return res.json(profile);
 });
 
+/** Uploads a profile photo. It replaces the emoji avatar and the previous photo, if any. */
+router.post('/me/avatar', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user!.userId;
+  const stored = saveImage(String(req.body?.dataUrl || ''), 'avatar');
+  if (!stored) return res.status(400).json({ error: 'Choose a PNG, JPEG, GIF or WebP photo under 500 KB.' });
+  const previous = db.getUser(userId)?.avatarEmoji;
+  const updated = db.updateUser(userId, { avatarEmoji: stored.url });
+  if (isOwnImageUrl(previous)) deleteUpload(previous);
+  broadcastPresence();
+  return res.json(updated);
+});
+
+/** Removes the profile photo and goes back to the emoji avatar. */
+router.delete('/me/avatar', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user!.userId;
+  const previous = db.getUser(userId)?.avatarEmoji;
+  const updated = db.updateUser(userId, { avatarEmoji: '👾' });
+  if (isOwnImageUrl(previous)) deleteUpload(previous);
+  broadcastPresence();
+  return res.json(updated);
+});
+
 router.patch('/me', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
   const body = req.body || {};
   const patch: Partial<DevUser> = {};
   if (typeof body.role === 'string') patch.role = body.role.slice(0, 40);
-  if (typeof body.avatarEmoji === 'string') patch.avatarEmoji = body.avatarEmoji.slice(0, 8);
+  if (typeof body.avatarEmoji === 'string') {
+    patch.avatarEmoji = isOwnImageUrl(body.avatarEmoji) ? body.avatarEmoji : body.avatarEmoji.slice(0, 8);
+  }
   if (Array.isArray(body.skills)) patch.skills = body.skills.slice(0, 6).map(String);
   if (typeof body.customStatus === 'string') patch.customStatus = body.customStatus.slice(0, 80);
   if (typeof body.bio === 'string') patch.bio = body.bio.slice(0, 280);

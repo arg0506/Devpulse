@@ -53,6 +53,36 @@ export function SettingsModal() {
     }
   };
 
+  /** Reads a chosen photo and sends it to the server. The server stores it and sets it as the avatar. */
+  const uploadPhoto = (file: File | undefined) => {
+    setError('');
+    if (!file) return;
+    if (file.size > 500_000) return setError('Photos must be 500 KB or smaller.');
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const updated = await api<DevUser>('/api/auth/me/avatar', { body: { dataUrl: String(reader.result) } });
+        setUser(updated);
+        setDraft((d) => ({ ...d, avatarEmoji: updated.avatarEmoji }));
+        setEditing(null);
+      } catch (err: any) {
+        setError(err.message);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removePhoto = async () => {
+    try {
+      const updated = await api<DevUser>('/api/auth/me/avatar', { method: 'DELETE' });
+      setUser(updated);
+      setDraft((d) => ({ ...d, avatarEmoji: updated.avatarEmoji }));
+      setEditing(null);
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
   const toggleSkill = (s: string) =>
     setDraft((d) => ({ ...d, skills: d.skills.includes(s) ? d.skills.filter((x) => x !== s) : d.skills.length < 5 ? [...d.skills, s] : d.skills }));
 
@@ -124,6 +154,19 @@ export function SettingsModal() {
           )}
         </div>
 
+        {editing === 'avatar' && (
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="cursor-pointer rounded-xl bg-ink px-4 py-2 text-[13px] font-semibold text-inverse">
+              Upload photo
+              <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" className="hidden" onChange={(e) => uploadPhoto(e.target.files?.[0])} />
+            </label>
+            {draft.avatarEmoji.startsWith('/uploads/') && (
+              <button type="button" onClick={removePhoto} className="rounded-xl border border-line px-4 py-2 text-[13px] font-semibold text-err">
+                Remove photo
+              </button>
+            )}
+          </div>
+        )}
         {editing === 'avatar' && (
           <div className="grid grid-cols-6 gap-2 rounded-2xl bg-subtle p-3">
             {AVATAR_CHOICES.map((a) => (

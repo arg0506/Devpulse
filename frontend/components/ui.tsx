@@ -154,7 +154,11 @@ export function Avatar({ emoji, size = 32, status, className }: { emoji: string;
       className={cx('relative inline-flex flex-shrink-0 items-center justify-center rounded-[28%] bg-subtle select-none', className)}
       style={{ width: size, height: size, fontSize: size * 0.5 }}
     >
-      <span aria-hidden="true">{emoji}</span>
+      {emoji.startsWith('/uploads/') ? (
+        <img src={emoji} alt="" draggable={false} className="h-full w-full rounded-[28%] object-cover" />
+      ) : (
+        <span aria-hidden="true">{emoji}</span>
+      )}
       {status && (
         <span className="absolute -right-0.5 -bottom-0.5 rounded-full bg-surface p-[2px]">
           <StatusDot status={status} />

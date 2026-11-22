@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 import { SocialModal, useSocial } from './SocialModal';
 import VoiceRoom from './VoiceRoom';
-import { CreateGroupModal, GroupInfoModal } from './GroupModals';
+import { ChannelGlyph, CreateGroupModal, GroupInfoModal } from './GroupModals';
 import { api } from '../lib/api';
 import { hasPermission, topRole } from '../lib/permissions';
 import { DevCommunity } from '../types';
@@ -164,7 +164,7 @@ function Sidebar({
           </button>
         ) : (
           <ul className="space-y-px" hidden={collapsed.groups}>
-            {groups.map((c) => item(c, <span className="flex h-[18px] w-[18px] items-center justify-center text-[13px] leading-none">{c.icon || '👥'}</span>, c.name))}
+            {groups.map((c) => item(c, <ChannelGlyph icon={c.icon} size={18} />, c.name))}
           </ul>
         )}
 
