@@ -22,6 +22,7 @@ import {
   UserPlus,
   ChevronDown,
   Settings,
+  Volume2,
 } from 'lucide-react';
 import { SocialModal, useSocial } from './SocialModal';
 import VoiceRoom from './VoiceRoom';
@@ -54,8 +55,9 @@ function Sidebar({
   onNavigate: () => void;
   onSocial: () => void;
 }) {
-  const { channels, activeChannelId, openChannel, unread, user, presenceOf } = useWorkspace();
-  const rooms = channels.filter((c) => c.category === 'Channels' || c.category === 'Guilds');
+  const { channels, activeChannelId, openChannel, unread, user, presenceOf, setView } = useWorkspace();
+  const rooms = channels.filter((c) => (c.category === 'Channels' || c.category === 'Guilds') && c.kind !== 'voice');
+  const voices = channels.filter((c) => c.kind === 'voice');
   const dms = channels.filter((c) => c.category === 'Direct Messages');
   const groups = channels.filter((c) => c.category === 'Groups');
 
@@ -101,6 +103,19 @@ function Sidebar({
         </div>
       </div>
       <div className="flex-1 overflow-y-auto px-2 py-3">
+        <ul className="mb-3 space-y-px">
+          {[
+            { label: 'Events', view: 'events' as const, icon: CalendarDays },
+            { label: 'Browse communities', view: 'communities' as const, icon: Users },
+          ].map(({ label, view, icon: Icon }) => (
+            <li key={label}>
+              <button type="button" onClick={() => setView(view)} className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] text-ink-2 hover:bg-[#35373c] hover:text-ink">
+                <Icon size={15} className="flex-shrink-0 text-ink-3" />
+                <span className="truncate">{label}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
         <div className="mb-1 flex items-center justify-between px-2">
           <span className="eyebrow">Channels</span>
           <IconButton label="New channel" onClick={onNewChannel} className="h-6 w-6">
@@ -120,6 +135,15 @@ function Sidebar({
             ),
           )}
         </ul>
+
+        <div className="mt-5 mb-1 flex items-center justify-between px-2">
+          <span className="eyebrow">Voice</span>
+        </div>
+        {voices.length === 0 ? (
+          <p className="px-2 py-1 text-[12.5px] text-ink-3">No voice channels yet</p>
+        ) : (
+          <ul className="space-y-px">{voices.map((c) => item(c, <Volume2 size={15} className="flex-shrink-0 text-ink-3" />, c.name))}</ul>
+        )}
 
         <div className="mt-5 mb-1 flex items-center justify-between px-2">
           <span className="eyebrow">Groups</span>
@@ -199,8 +223,8 @@ function MemberColumn() {
   const group = (title: string, list: typeof people) =>
     list.length === 0 ? null : (
       <div className="mb-4">
-        <p className="mb-1 px-2 text-[11px] font-semibold uppercase tracking-[0.02em] text-ink-3">
-          {title} — {list.length}
+        <p className="mb-2 px-2 text-[12px] font-bold uppercase tracking-[0.02em] text-ink-3">
+          {title} <span className="ml-1 font-semibold">{list.length}</span>
         </p>
         <ul>
           {list.map((p) => (
@@ -213,7 +237,7 @@ function MemberColumn() {
       </div>
     );
   return (
-    <aside className="hidden w-60 flex-shrink-0 flex-col overflow-y-auto bg-surface px-2 pt-4 xl:flex">
+    <aside className="hidden w-64 flex-shrink-0 flex-col overflow-y-auto bg-surface px-3 pt-5 xl:flex">
       {group('Online', online)}
       {group('Offline', offline)}
     </aside>
