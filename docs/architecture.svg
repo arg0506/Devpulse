@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 640" role="img" aria-label="Lemo architecture">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#8a909c"/>
+    </marker>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M40 0 H0 V40" fill="none" stroke="#ffffff" stroke-opacity="0.04"/>
+    </pattern>
+  </defs>
+  <rect width="1100" height="640" fill="#000000"/>
+  <rect width="1100" height="640" fill="url(#grid)"/>
+
+  <text x="550" y="50" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="26" fill="#eceef2">How Lemo fits together</text>
+
+  <!-- Browser -->
+  <g>
+    <rect x="40" y="110" width="300" height="460" rx="22" fill="#0b0c10" stroke="#ffd23f" stroke-width="2.5"/>
+    <rect x="40" y="110" width="300" height="56" rx="22" fill="#ffd23f"/>
+    <rect x="40" y="144" width="300" height="22" fill="#ffd23f"/>
+    <text x="190" y="146" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="18" fill="#0a0b0d">Browser · React 19</text>
+    <g font-family="Consolas, 'Courier New', monospace" font-size="14" fill="#eceef2">
+      <text x="64" y="206">• Landing page + auth</text>
+      <text x="64" y="236">• Overview dashboard</text>
+      <text x="64" y="266">• Chat, threads, snippets</text>
+      <text x="64" y="296">• Communities + roles</text>
+      <text x="64" y="326">• Whiteboard (canvas)</text>
+      <text x="64" y="356">• Agent studio (canvas)</text>
+      <text x="64" y="386">• Console (Ctrl + `)</text>
+      <text x="64" y="416">• JS runner (Web Worker)</text>
+    </g>
+    <circle cx="300" cy="530" r="18" fill="#3ddc97" stroke="#0a0b0d" stroke-width="3"/>
+  </g>
+
+  <!-- Server -->
+  <g>
+    <rect x="400" y="110" width="330" height="460" rx="22" fill="#0b0c10" stroke="#7cc4ff" stroke-width="2.5"/>
+    <rect x="400" y="110" width="330" height="56" rx="22" fill="#7cc4ff"/>
+    <rect x="400" y="144" width="330" height="22" fill="#7cc4ff"/>
+    <text x="565" y="146" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="18" fill="#0a0b0d">Server · Node + Express</text>
+    <g font-family="Consolas, 'Courier New', monospace" font-size="14" fill="#eceef2">
+      <text x="424" y="206">• REST: /api/auth, /communities,</text>
+      <text x="424" y="226">   /events, /agents, /payments</text>
+      <text x="424" y="262">• Socket.io: chat, presence, board,</text>
+      <text x="424" y="282">   social, moderation, console</text>
+      <text x="424" y="318">• Permissions (roles, channels)</text>
+      <text x="424" y="338">• Slash commands (/roll, /poll)</text>
+      <text x="424" y="374">• Auth: JWT, bcrypt passwords</text>
+      <text x="424" y="394">• Gemini bridge for @gemini replies</text>
+    </g>
+    <text x="565" y="452" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="16" fill="#ffd23f">one process · one port</text>
+  </g>
+
+  <!-- Storage -->
+  <g>
+    <ellipse cx="860" cy="200" rx="150" ry="44" fill="#0b0c10" stroke="#3ddc97" stroke-width="2.5"/>
+    <path d="M710 200 V470 A150 44 0 0 0 1010 470 V200" fill="#0b0c10" stroke="#3ddc97" stroke-width="2.5"/>
+    <ellipse cx="860" cy="200" rx="150" ry="44" fill="none" stroke="#3ddc97" stroke-width="2.5"/>
+    <text x="860" y="206" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="17" fill="#3ddc97">JSON store</text>
+    <text x="860" y="300" text-anchor="middle" font-family="Consolas, monospace" font-size="14" fill="#8a909c">backend-data.json</text>
+    <text x="860" y="340" text-anchor="middle" font-family="Consolas, monospace" font-size="14" fill="#8a909c">or PostgreSQL</text>
+    <text x="860" y="370" text-anchor="middle" font-family="Consolas, monospace" font-size="14" fill="#8a909c">(via Prisma, optional)</text>
+  </g>
+
+  <!-- External -->
+  <g>
+    <rect x="400" y="560" width="330" height="58" rx="16" fill="#0b0c10" stroke="#b49cff" stroke-width="2.5"/>
+    <text x="565" y="596" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="16" fill="#b49cff">Gemini API · Google Search</text>
+    <rect x="800" y="560" width="250" height="58" rx="16" fill="#0b0c10" stroke="#ff9f43" stroke-width="2.5"/>
+    <text x="925" y="596" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="16" fill="#ff9f43">Webhooks (Slack, Discord)</text>
+  </g>
+
+  <!-- arrows -->
+  <g stroke="#8a909c" stroke-width="2.5" fill="none" marker-end="url(#arrow)">
+    <path d="M340 230 H400"/>
+    <path d="M400 290 H340"/>
+    <path d="M730 300 H710"/>
+    <path d="M565 560 V570" stroke-dasharray="4 4"/>
+    <path d="M730 470 Q780 540 800 560" stroke-dasharray="4 4"/>
+  </g>
+  <text x="370" y="222" text-anchor="middle" font-family="Consolas, monospace" font-size="12" fill="#8a909c">WebSocket</text>
+  <text x="370" y="312" text-anchor="middle" font-family="Consolas, monospace" font-size="12" fill="#8a909c">HTTPS</text>
+</svg>

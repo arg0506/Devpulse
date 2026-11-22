@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 340" role="img" aria-label="Lemo banner">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#b49cff"/>
+      <stop offset="22%" stop-color="#ff8fc7"/>
+      <stop offset="42%" stop-color="#ff6670"/>
+      <stop offset="60%" stop-color="#ff9f43"/>
+      <stop offset="76%" stop-color="#ffd23f"/>
+      <stop offset="90%" stop-color="#3ddc97"/>
+      <stop offset="100%" stop-color="#7cc4ff"/>
+    </linearGradient>
+    <pattern id="dots" width="28" height="28" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1.4" fill="#ffffff" fill-opacity="0.07"/>
+    </pattern>
+  </defs>
+  <rect width="1200" height="340" fill="#000000"/>
+  <rect width="1200" height="340" fill="url(#dots)"/>
+
+  <!-- sticker shapes -->
+  <circle cx="1080" cy="70" r="70" fill="#ffd23f" stroke="#0a0b0d" stroke-width="4"/>
+  <rect x="980" y="230" width="90" height="90" rx="22" fill="#3ddc97" stroke="#0a0b0d" stroke-width="4" transform="rotate(12 1025 275)"/>
+  <circle cx="60" cy="300" r="34" fill="#b49cff" stroke="#0a0b0d" stroke-width="4"/>
+
+  <!-- mark -->
+  <g transform="translate(120 96) scale(2.4)">
+    <g transform="rotate(-8 24 24)">
+      <rect x="7" y="7" width="40" height="40" rx="12" fill="#ff6670"/>
+      <rect x="4" y="4" width="40" height="40" rx="12" fill="#111318"/>
+      <path d="M15 12 V31 H24 L27 25 L30 35 L33 28 H36" fill="none" stroke="#ffd23f" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M40 2 L41.6 6.4 L46 8 L41.6 9.6 L40 14 L38.4 9.6 L34 8 L38.4 6.4 Z" fill="#7cc4ff"/>
+    </g>
+  </g>
+
+  <!-- wordmark -->
+  <text x="290" y="170" font-family="Arial Black, Arial, sans-serif" font-size="128" font-weight="900" letter-spacing="-4" fill="url(#g)">lemo</text>
+
+  <!-- tagline -->
+  <text x="120" y="250" font-family="Consolas, 'Courier New', monospace" font-size="26" fill="#eceef2">
+    <tspan fill="#3ddc97">$</tspan> live workspace for developer teams
+  </text>
+  <text x="120" y="290" font-family="Consolas, 'Courier New', monospace" font-size="20" fill="#6b7280">
+    chat · whiteboard · agent studio · console · communities
+  </text>
+
+  <!-- heartbeat trace -->
+  <path d="M0 330 H420 L440 330 L456 300 L470 350 L484 330 H1200" fill="none" stroke="#3ddc97" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity="0.7"/>
+</svg>
