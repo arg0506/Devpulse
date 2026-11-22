@@ -49,10 +49,10 @@ export function LemoMark({ size = 28, className }: { size?: number; className?: 
 
 // Each letter of the wordmark gets its own colour and bounces on hover.
 const WORDMARK_LETTERS = [
-  { letter: 'l', color: '#f2545b' },
-  { letter: 'e', color: '#ff9f43' },
-  { letter: 'm', color: '#3ddc97' },
-  { letter: 'o', color: '#b49cff' },
+  { letter: 'l', color: '#0a0b0d' },
+  { letter: 'e', color: '#0a0b0d' },
+  { letter: 'm', color: '#0a0b0d' },
+  { letter: 'o', color: '#0a0b0d' },
 ];
 
 export function Wordmark({ className }: { className?: string }) {
