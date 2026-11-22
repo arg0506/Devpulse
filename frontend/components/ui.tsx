@@ -48,20 +48,19 @@ export function LemoMark({ size = 28, className }: { size?: number; className?: 
 }
 
 // Each letter of the wordmark gets its own colour and bounces on hover.
-const WORDMARK_LETTERS = [
-  { letter: 'l', color: '#0a0b0d' },
-  { letter: 'e', color: '#0a0b0d' },
-  { letter: 'm', color: '#0a0b0d' },
-  { letter: 'o', color: '#0a0b0d' },
-];
+const WORDMARK_LETTERS = ['l', 'e', 'm', 'o'];
 
+/**
+ * The Lemo logo. It takes the colour of the text around it, so it reads as black on light
+ * backgrounds and white on dark ones. Set a text colour on the parent to change it.
+ */
 export function Wordmark({ className }: { className?: string }) {
   return (
-    <span className={cx('inline-flex items-center gap-2', className)}>
+    <span className={cx('inline-flex items-center gap-2 text-current', className)}>
       <LemoMark size={30} />
       <span className="font-display text-[24px] leading-none font-extrabold tracking-[-0.04em]">
-        {WORDMARK_LETTERS.map(({ letter, color }) => (
-          <span key={letter} className="inline-block transition-transform duration-200 hover:-translate-y-1" style={{ color }}>
+        {WORDMARK_LETTERS.map((letter) => (
+          <span key={letter} className="inline-block transition-transform duration-200 hover:-translate-y-1">
             {letter}
           </span>
         ))}

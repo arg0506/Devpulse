@@ -509,7 +509,7 @@ export default function LandingPage({ onGetStarted, onSignIn }: LandingPageProps
       <footer className="bg-[#0a0b0d] px-6 pt-16 pb-8 text-white">
         <div className="mx-auto max-w-6xl">
           <div className="grid gap-10 md:grid-cols-[1.5fr_1fr_1fr_1fr]">
-            <div>
+            <div className="text-white">
               <Wordmark />
               <p className="mt-5 max-w-xs text-[14px] leading-relaxed text-white/60">A live workspace for developer teams: channels, a shared board, agents and voice in one place.</p>
             </div>
