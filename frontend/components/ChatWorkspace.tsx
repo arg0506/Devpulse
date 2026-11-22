@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { SocialModal, useSocial } from './SocialModal';
 import VoiceRoom from './VoiceRoom';
+import { CreateGroupModal, GroupInfoModal } from './GroupModals';
 import { api } from '../lib/api';
 import { hasPermission } from '../lib/permissions';
 import { DevCommunity } from '../types';
@@ -45,8 +46,10 @@ function Sidebar({
   onNewDM,
   onNavigate,
   onSocial,
+  onNewGroup,
 }: {
   onNewChannel: () => void;
+  onNewGroup: () => void;
   onNewDM: () => void;
   onNavigate: () => void;
   onSocial: () => void;
@@ -54,6 +57,7 @@ function Sidebar({
   const { channels, activeChannelId, openChannel, unread, user, presenceOf } = useWorkspace();
   const rooms = channels.filter((c) => c.category === 'Channels' || c.category === 'Guilds');
   const dms = channels.filter((c) => c.category === 'Direct Messages');
+  const groups = channels.filter((c) => c.category === 'Groups');
 
   const item = (c: DevChannel, icon: React.ReactNode, label: string) => {
     const count = unread[c.id] || 0;
@@ -116,6 +120,26 @@ function Sidebar({
             ),
           )}
         </ul>
+
+        <div className="mt-5 mb-1 flex items-center justify-between px-2">
+          <span className="eyebrow">Groups</span>
+          <IconButton label="New group" onClick={onNewGroup} className="h-6 w-6">
+            <Plus size={14} />
+          </IconButton>
+        </div>
+        {groups.length === 0 ? (
+          <button
+            type="button"
+            onClick={onNewGroup}
+            className="w-full rounded-md px-2 py-1.5 text-left text-[12.5px] text-ink-3 hover:bg-subtle hover:text-ink"
+          >
+            Start a group
+          </button>
+        ) : (
+          <ul className="space-y-px">
+            {groups.map((c) => item(c, <span className="flex h-[18px] w-[18px] items-center justify-center text-[13px] leading-none">{c.icon || '👥'}</span>, c.name))}
+          </ul>
+        )}
 
         <div className="mt-5 mb-1 flex items-center justify-between px-2">
           <span className="eyebrow">Direct messages</span>
@@ -870,6 +894,8 @@ export default function ChatWorkspace() {
     socket.emit('messages:older', { channelId: activeChannelId, beforeId: oldest.id });
   };
   const [socialOpen, setSocialOpen] = useState(false);
+  const [groupCreate, setGroupCreate] = useState(false);
+  const [groupInfo, setGroupInfo] = useState(false);
   const social = useSocial();
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -1072,7 +1098,7 @@ export default function ChatWorkspace() {
     <div className="flex min-w-0 flex-1">
       {/* Sidebar: inline on desktop, overlay on small screens */}
       <div className="hidden md:block">
-        <Sidebar onNewChannel={() => setChannelModal(true)} onNewDM={() => setDmModal(true)} onNavigate={() => undefined} onSocial={() => setSocialOpen(true)} />
+        <Sidebar onNewChannel={() => setChannelModal(true)} onNewDM={() => setDmModal(true)} onNavigate={() => undefined} onSocial={() => setSocialOpen(true)} onNewGroup={() => setGroupCreate(true)} />
       </div>
       {mobileSidebar && (
         <div className="fixed inset-0 z-50 flex md:hidden" onClick={() => setMobileSidebar(false)}>
@@ -1081,7 +1107,7 @@ export default function ChatWorkspace() {
               onNewChannel={() => setChannelModal(true)}
               onNewDM={() => setDmModal(true)}
               onNavigate={() => setMobileSidebar(false)}
-              onSocial={() => setSocialOpen(true)}
+              onSocial={() => setSocialOpen(true)} onNewGroup={() => setGroupCreate(true)}
             />
           </div>
           <div className="flex-1 bg-ink/20" />
@@ -1105,6 +1131,11 @@ export default function ChatWorkspace() {
           subtitle={isDM ? presenceOf((channel?.members || []).find((m) => m !== user.id) || '')?.role : channel?.description}
           actions={
             <>
+              {channel?.category === 'Groups' && (
+                <IconButton label="Group info" onClick={() => setGroupInfo(true)}>
+                  <Users size={16} />
+                </IconButton>
+              )}
               {isEvent && (
                 <Button size="sm" variant="ghost" onClick={() => setView('events')}>
                   Event details
@@ -1266,6 +1297,8 @@ export default function ChatWorkspace() {
       )}
 
       <SocialModal open={socialOpen} onClose={() => setSocialOpen(false)} />
+      <CreateGroupModal open={groupCreate} onClose={() => setGroupCreate(false)} />
+      {channel?.category === 'Groups' && groupInfo && <GroupInfoModal open={groupInfo} onClose={() => setGroupInfo(false)} channel={channel} />}
       <Modal
         open={snippetOpen}
         onClose={() => setSnippetOpen(false)}
