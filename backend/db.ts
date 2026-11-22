@@ -37,6 +37,8 @@ const DATA_FILE = process.env.DEVPULSE_DATA_FILE || path.join(process.cwd(), 'ba
 interface Credential {
   email: string;
   passwordHash: string;
+  /** Bumped on sign-out so older tokens stop working. */
+  sessionVersion?: number;
 }
 
 interface DatabaseSchema {
@@ -499,6 +501,18 @@ class Database {
   setTimeoutFor(userId: string, until: string | null) {
     if (until) this.data.timeouts[userId] = until;
     else delete this.data.timeouts[userId];
+    this.save();
+  }
+
+  getSessionVersion(userId: string): number {
+    return this.data.credentials[userId]?.sessionVersion ?? 0;
+  }
+
+  /** Invalidates every token issued to this account so far. */
+  revokeSessions(userId: string) {
+    const credential = this.data.credentials[userId];
+    if (!credential) return;
+    credential.sessionVersion = (credential.sessionVersion ?? 0) + 1;
     this.save();
   }
 

@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { db } from '../db';
 
 const DEV_FALLBACK_SECRET = 'lemo-local-dev-secret-change-me';
 const JWT_SECRET = process.env.JWT_SECRET || DEV_FALLBACK_SECRET;
@@ -21,15 +22,19 @@ export interface AuthenticatedRequest extends Request {
   user?: TokenPayload;
 }
 
+/** Tokens carry the account's session version. Signing out bumps it, which invalidates every token issued before. */
 export function signToken(payload: TokenPayload): string {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
+  return jwt.sign({ ...payload, ver: db.getSessionVersion(payload.userId) }, JWT_SECRET, { expiresIn: '7d' });
 }
 
 export function verifyToken(token: string | undefined | null): TokenPayload | null {
   if (!token) return null;
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as TokenPayload;
-    return decoded?.userId ? { userId: decoded.userId, username: decoded.username } : null;
+    const decoded = jwt.verify(token, JWT_SECRET) as TokenPayload & { ver?: number };
+    if (!decoded?.userId) return null;
+    // Tokens issued before a sign-out are no longer accepted.
+    if ((decoded.ver ?? 0) !== db.getSessionVersion(decoded.userId)) return null;
+    return { userId: decoded.userId, username: decoded.username };
   } catch {
     return null;
   }

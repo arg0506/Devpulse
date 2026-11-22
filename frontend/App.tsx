@@ -31,6 +31,8 @@ export default function App() {
   }, []);
 
   const signOut = useCallback(() => {
+    // Tell the server to end this session too, so a copied token stops working. Sign-out succeeds even if the call fails.
+    api('/api/auth/logout', { method: 'POST' }).catch(() => undefined);
     setToken(null);
     socket.disconnect();
     setUser(null);

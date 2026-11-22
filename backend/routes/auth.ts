@@ -4,7 +4,7 @@ import prisma, { isPrismaEnabled } from '../prismaClient';
 import { authMiddleware, AuthenticatedRequest, signToken } from '../middleware/auth';
 import { db } from '../db';
 import { DevUser } from '../../frontend/types';
-import { broadcastPresence } from '../realtime';
+import { broadcastPresence, getIO } from '../realtime';
 
 const router = Router();
 
@@ -125,6 +125,14 @@ router.post('/login', async (req, res) => {
     console.error('[auth] login failed:', error);
     return res.status(500).json({ error: 'Could not sign in. Try again in a moment.' });
   }
+});
+
+/** Ends every session for this account, on every device, and disconnects its live sockets. */
+router.post('/logout', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user!.userId;
+  db.revokeSessions(userId);
+  getIO()?.in(`user:${userId}`).disconnectSockets(true);
+  res.json({ ok: true });
 });
 
 router.get('/me', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
