@@ -28,7 +28,18 @@ function scrollToSection(id: string) {
 }
 
 /** Fades and lifts its children into view the first time they are on screen. */
-function Reveal({ children, delay = 0, className }: { children: React.ReactNode; delay?: number; className?: string }) {
+function Reveal({
+  children,
+  delay = 0,
+  className,
+  from = 'up',
+}: {
+  children: React.ReactNode;
+  delay?: number;
+  className?: string;
+  /** Direction the content comes in from: up (default), left, right or scale. */
+  from?: 'up' | 'left' | 'right' | 'scale';
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const [shown, setShown] = useState(false);
   useEffect(() => {
@@ -50,7 +61,7 @@ function Reveal({ children, delay = 0, className }: { children: React.ReactNode;
     return () => io.disconnect();
   }, []);
   return (
-    <div ref={ref} className={cx('reveal', shown && 'is-in', className)} style={{ ['--d' as any]: `${delay}ms` }}>
+    <div ref={ref} className={cx('reveal', from !== 'up' && `reveal-${from}`, shown && 'is-in', className)} style={{ ['--d' as any]: `${delay}ms` }}>
       {children}
     </div>
   );
@@ -243,10 +254,10 @@ export default function LandingPage({ onGetStarted, onSignIn }: LandingPageProps
           </div>
 
           {/* Side cards */}
-          <div className="absolute left-[7%] top-[34%] hidden w-56 -rotate-[8deg] overflow-hidden rounded-[28px] bg-white/25 p-2 shadow-[0_30px_60px_-20px_rgba(0,15,80,0.55)] backdrop-blur-sm lg:block">
+          <div className="animate-float-soft absolute left-[7%] top-[34%] hidden w-56 overflow-hidden rounded-[28px] bg-white/25 p-2 shadow-[0_30px_60px_-20px_rgba(0,15,80,0.55)] backdrop-blur-sm lg:block" style={{ ['--tilt' as any]: '-8deg' }}>
             <img src={HERO_FIGURE} alt="" className="h-72 w-full rounded-[22px] object-cover" draggable={false} />
           </div>
-          <div className="absolute right-[7%] top-[40%] hidden w-60 rotate-[7deg] rounded-[28px] bg-white p-5 text-left text-[#0a0b0d] shadow-[0_30px_60px_-20px_rgba(0,15,80,0.55)] lg:block">
+          <div className="animate-float-soft absolute right-[7%] top-[40%] hidden w-60 rounded-[28px] bg-white p-5 text-left text-[#0a0b0d] shadow-[0_30px_60px_-20px_rgba(0,15,80,0.55)] lg:block" style={{ ['--tilt' as any]: '7deg' }}>
             <p className="font-mono text-[11px] text-[#0a0b0d]/50">#react-vite</p>
             <p className="mt-3 text-[14px] font-semibold">dan_abramov</p>
             <p className="text-[13px] text-[#0a0b0d]/70">Throttle socket updates to 60ms.</p>
@@ -279,7 +290,7 @@ export default function LandingPage({ onGetStarted, onSignIn }: LandingPageProps
               <Reveal key={title} delay={(i % 3) * 100} className="h-full">
                 <article
                   className={cx(
-                    'flex h-full flex-col rounded-3xl p-7',
+                    'group relative flex h-full flex-col overflow-hidden rounded-3xl p-7 transition-all duration-300 hover:-translate-y-1.5 hover:shadow-[0_24px_50px_-20px_rgba(10,26,79,0.35)]',
                     tone === 'blue' && 'text-white',
                     tone === 'white' && 'border border-[#0a0b0d]/10 bg-white',
                     tone === 'pale' && 'bg-[#f4f5fb]',
@@ -309,7 +320,7 @@ export default function LandingPage({ onGetStarted, onSignIn }: LandingPageProps
           <div className="mt-16 grid gap-5 md:grid-cols-3">
             {STEPS.map((s, i) => (
               <Reveal key={s.n} delay={i * 120} className="h-full">
-                <div className="flex h-full flex-col rounded-3xl bg-white p-8">
+                <div className="group flex h-full flex-col rounded-3xl bg-white p-8 transition-all duration-300 hover:-translate-y-1.5 hover:shadow-[0_24px_50px_-20px_rgba(10,26,79,0.3)]">
                   <span className="flex h-14 w-14 items-center justify-center rounded-full bg-[#0a0b0d] font-display text-[18px] font-bold text-white">{s.n}</span>
                   <h3 className="mt-8 font-display text-[24px] leading-tight font-bold tracking-[-0.02em]">{s.title}</h3>
                   <p className="mt-3 text-[15px] leading-relaxed text-[#0a0b0d]/60">{s.body}</p>
@@ -322,7 +333,7 @@ export default function LandingPage({ onGetStarted, onSignIn }: LandingPageProps
 
       {/* Workspace preview on a blue card */}
       <section className="px-5 py-24">
-        <Reveal className="mx-auto max-w-6xl rounded-[32px] px-6 py-16 md:px-14" >
+        <Reveal from="scale" className="mx-auto max-w-6xl rounded-[32px] px-6 py-16 md:px-14">
           <div className="rounded-[32px] px-6 py-16 md:px-14" style={{ backgroundColor: BLUE }}>
             <div className="grid items-center gap-12 lg:grid-cols-2">
               <div className="text-white">
@@ -363,7 +374,7 @@ export default function LandingPage({ onGetStarted, onSignIn }: LandingPageProps
           <div className="mt-16 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
             {SELF_HOST.map(({ icon: Icon, title, body }, i) => (
               <Reveal key={title} delay={i * 80} className="h-full">
-                <div className="flex h-full flex-col rounded-3xl bg-white p-6">
+                <div className="group flex h-full flex-col rounded-3xl bg-white p-6 transition-all duration-300 hover:-translate-y-1.5 hover:shadow-[0_24px_50px_-20px_rgba(10,26,79,0.3)]">
                   <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#eef2ff] text-[#2f5bff]">
                     <Icon size={18} />
                   </span>
@@ -390,7 +401,12 @@ export default function LandingPage({ onGetStarted, onSignIn }: LandingPageProps
               return (
                 <Reveal key={p.name} delay={i * 100} className="h-full">
                   <div
-                    className={cx('flex h-full flex-col rounded-3xl p-8', p.tone === 'white' && 'border border-[#0a0b0d]/10 bg-white', dark && 'bg-[#0a0b0d] text-white', blue && 'text-white')}
+                    className={cx(
+                      'flex h-full flex-col rounded-3xl p-8 transition-all duration-300 hover:-translate-y-2 hover:shadow-[0_30px_60px_-24px_rgba(10,26,79,0.4)]',
+                      p.tone === 'white' && 'border border-[#0a0b0d]/10 bg-white',
+                      dark && 'bg-[#0a0b0d] text-white',
+                      blue && 'text-white',
+                    )}
                     style={blue ? { backgroundColor: BLUE } : undefined}
                   >
                     <div className="flex items-center justify-between">
@@ -432,12 +448,12 @@ export default function LandingPage({ onGetStarted, onSignIn }: LandingPageProps
       {/* FAQ */}
       <section id="faq" className="scroll-mt-24 bg-[#f4f5fb] px-5 py-24">
         <div className="mx-auto grid max-w-6xl gap-12 md:grid-cols-[1fr_1.3fr]">
-          <Reveal>
+          <Reveal from="left">
             <span className="inline-block rounded-full bg-[#eef2ff] px-3 py-1 text-[12px] font-semibold text-[#2f5bff]">FAQ</span>
             <h2 className="mt-5 font-display text-[44px] leading-[1.02] font-extrabold tracking-[-0.035em]">Good questions</h2>
             <p className="mt-5 max-w-sm text-[15px] leading-relaxed text-[#0a0b0d]/60">Still stuck? Sign up and press Ctrl + ` to explore the workspace first.</p>
           </Reveal>
-          <Reveal delay={120}>
+          <Reveal from="right" delay={120}>
             <div className="divide-y divide-[#0a0b0d]/10 rounded-3xl bg-white px-7">
               {FAQS.map((f) => (
                 <details key={f.q} className="group py-6">

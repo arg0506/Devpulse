@@ -141,16 +141,19 @@ export default function AuthScreen({ initialMode, onAuthenticated, onBack }: Aut
   const subheading = mode === 'signin' ? 'Please enter your details' : step === 1 ? 'It takes about a minute' : 'You can change all of this later';
 
   return (
-    <div className="flex min-h-full flex-col items-center justify-center bg-[#1c1d22] p-4 md:p-10">
+    <div
+      className="flex min-h-full flex-col items-center justify-center p-4 md:p-10"
+      style={{ background: 'radial-gradient(ellipse at 50% 30%, #2f6bff 0%, #1d54f0 45%, #0f3fc9 100%)' }}
+    >
       <div className="mb-5 flex w-full max-w-[1000px] items-center justify-between">
         <button type="button" onClick={onBack} className="inline-flex items-center gap-1.5 text-[13px] text-white/60 transition-colors hover:text-white">
           <ArrowLeft size={14} /> Back to site
         </button>
       </div>
 
-      <div className="grid w-full max-w-[1000px] overflow-hidden rounded-3xl bg-white shadow-[0_40px_120px_-30px_rgba(0,0,0,0.8)] md:grid-cols-2">
+      <div className="grid w-full max-w-[1000px] overflow-hidden rounded-[32px] bg-white shadow-[0_40px_120px_-30px_rgba(0,8,50,0.6)] md:grid-cols-2">
         {/* Illustration panel */}
-        <div className="hidden items-center justify-center bg-[#e9e9eb] p-10 md:flex">
+        <div className="hidden items-center justify-center bg-[#eef2ff] p-10 md:flex">
           <Characters />
         </div>
 

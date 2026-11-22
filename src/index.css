@@ -207,6 +207,29 @@
   opacity: 1;
   transform: none;
 }
+/* Directional reveals: sections can slide in from the left, right or grow from a smaller scale. */
+.reveal-left {
+  transform: translateX(-56px);
+}
+.reveal-right {
+  transform: translateX(56px);
+}
+.reveal-scale {
+  transform: scale(0.94);
+}
+/* Gentle floating for decorative shapes on the hero. */
+@keyframes float-soft {
+  0%,
+  100% {
+    transform: translateY(0) rotate(var(--tilt, 0deg));
+  }
+  50% {
+    transform: translateY(-14px) rotate(var(--tilt, 0deg));
+  }
+}
+.animate-float-soft {
+  animation: float-soft 7s ease-in-out infinite;
+}
 /* Strokes drawn on reveal, used by the landing illustrations. */
 .reveal-draw {
   stroke-dasharray: 1;
