@@ -251,6 +251,19 @@ npm run db:push
 
 ---
 
+## 🔥 Firebase sign-in
+
+Lemo uses **Firebase Authentication** for email and password, and for Google sign-in. Firebase proves who someone is; Lemo keeps the profile, communities and sessions. Existing Lemo username and password accounts keep working.
+
+To turn it on for your own project:
+
+1. In the Firebase console, open **Authentication → Sign-in method** and enable **Email/Password** and **Google**.
+2. Under **Authentication → Settings → Authorized domains**, add the domain you serve Lemo from (`localhost` is there by default).
+3. Put your project's web configuration in `frontend/lib/firebase.ts`. These values identify the project and are meant to be public. Protect the project with the console settings above, not by hiding them.
+4. Set `FIREBASE_PROJECT_ID` on the server if it differs from the default.
+
+The server never needs a Firebase service key. It checks each sign-in token against Google's published signing certificates, along with the issuer, audience and expiry. A Firebase email that matches an existing Lemo account is linked only when Firebase has verified it.
+
 ## 📜 Scripts
 
 | Command | What it does |
