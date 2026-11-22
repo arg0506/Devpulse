@@ -5,6 +5,8 @@ import { authMiddleware, AuthenticatedRequest, signToken } from '../middleware/a
 import { db } from '../db';
 import { DevUser } from '../../frontend/types';
 import { broadcastPresence } from '../realtime';
+import { parseLinks } from '../linkCards';
+import { isValidAvatar } from './users';
 
 const router = Router();
 
@@ -146,8 +148,21 @@ router.patch('/me', authMiddleware, async (req: AuthenticatedRequest, res: Respo
   if (typeof body.bio === 'string') patch.bio = body.bio.slice(0, 280);
   if (typeof body.gitHubHandle === 'string') patch.gitHubHandle = body.gitHubHandle.slice(0, 39);
   if (['online', 'away', 'dnd'].includes(body.status)) patch.status = body.status;
+  if (typeof body.displayName === 'string') patch.displayName = body.displayName.trim().slice(0, 40);
+  if (typeof body.location === 'string') patch.location = body.location.trim().slice(0, 60);
+  if (body.links !== undefined) {
+    try {
+      patch.links = parseLinks(body.links);
+    } catch (err: any) {
+      return res.status(400).json({ error: err.message });
+    }
+  }
+  if (body.avatarImage !== undefined && body.avatarImage !== null && !isValidAvatar(body.avatarImage)) {
+    return res.status(400).json({ error: 'Profile photos must be a PNG, JPEG or WebP image under 220 KB.' });
+  }
 
   const updated = db.updateUser(req.user!.userId, patch);
+  if (updated && body.avatarImage !== undefined) db.setAvatar(req.user!.userId, body.avatarImage);
   if (!updated) return res.status(404).json({ error: 'This account no longer exists.' });
   broadcastPresence();
 

@@ -9,6 +9,7 @@ import {
   DevCommunity,
   DevEvent,
   AgentWorkflow,
+  DevGroup,
   PresenceStatus,
 } from '../frontend/types';
 
@@ -32,6 +33,7 @@ interface DatabaseSchema {
   communities: DevCommunity[];
   events: DevEvent[];
   workflows: AgentWorkflow[];
+  groups: DevGroup[];
 }
 
 /** Returns an ISO date `days` from now at the given local hour. */
@@ -221,6 +223,7 @@ class Database {
     communities: [...DEFAULT_COMMUNITIES],
     events: [...DEFAULT_EVENTS],
     workflows: [],
+    groups: [],
   };
   private saveTimer: NodeJS.Timeout | null = null;
   /** Set when an unreadable data file could not be moved aside; writing then would destroy it. */
@@ -244,6 +247,7 @@ class Database {
           communities: parsed.communities?.length ? parsed.communities : [...DEFAULT_COMMUNITIES],
           events: parsed.events?.length ? parsed.events : [...DEFAULT_EVENTS],
           workflows: parsed.workflows || [],
+          groups: parsed.groups || [],
         };
         this.migrate();
         console.log('[db] Loaded', DATA_FILE);
@@ -338,10 +342,32 @@ class Database {
   updateUser(id: string, patch: Partial<DevUser>): DevUser | undefined {
     const user = this.data.users[id];
     if (!user) return undefined;
-    const allowed: (keyof DevUser)[] = ['role', 'avatarEmoji', 'skills', 'customStatus', 'bio', 'gitHubHandle', 'status'];
+    const allowed: (keyof DevUser)[] = [
+      'role',
+      'avatarEmoji',
+      'skills',
+      'customStatus',
+      'bio',
+      'gitHubHandle',
+      'status',
+      'displayName',
+      'location',
+      'links',
+    ];
     for (const key of allowed) {
       if (patch[key] !== undefined) (user as any)[key] = patch[key];
     }
+    this.save();
+    return user;
+  }
+
+  /** Sets or removes (null) the profile photo. The version changes on every update so browsers refetch it. */
+  setAvatar(id: string, dataUrl: string | null): DevUser | undefined {
+    const user = this.data.users[id];
+    if (!user) return undefined;
+    if (dataUrl) user.avatarImage = dataUrl;
+    else delete user.avatarImage;
+    user.avatarVersion = Date.now();
     this.save();
     return user;
   }
@@ -397,9 +423,11 @@ class Database {
     return this.data.channels;
   }
 
-  /** Public channels plus the DMs the user participates in. */
+  /** Public channels plus the DMs and group chats the user participates in. */
   getChannelsForUser(userId: string): DevChannel[] {
-    return this.data.channels.filter((c) => c.category !== 'Direct Messages' || (c.members || []).includes(userId));
+    return this.data.channels.filter(
+      (c) => (c.category !== 'Direct Messages' && c.category !== 'Groups') || (c.members || []).includes(userId),
+    );
   }
 
   getChannel(id: string): DevChannel | undefined {
@@ -410,6 +438,8 @@ class Database {
     if (channelId.startsWith('dm:')) {
       return channelId.split(':').slice(1).includes(userId);
     }
+    const channel = this.getChannel(channelId);
+    if (channel?.category === 'Groups') return (channel.members || []).includes(userId);
     return true;
   }
 
@@ -573,6 +603,44 @@ class Database {
     evt.rsvps = evt.rsvps.includes(username) ? evt.rsvps.filter((u) => u !== username) : [...evt.rsvps, username];
     this.save();
     return evt;
+  }
+
+  // ---------- Groups ----------
+  listGroups(): DevGroup[] {
+    return this.data.groups;
+  }
+
+  getGroup(id: string): DevGroup | undefined {
+    return this.data.groups.find((g) => g.id === id);
+  }
+
+  /** A group owns one chat channel; the channel's members mirror the group's members. */
+  createGroup(name: string, description: string, ownerId: string): { group: DevGroup; channel: DevChannel } {
+    const id = `grp-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+    const channel = this.createChannel({
+      id: `group-${id}`,
+      name: slugify(name) || 'group',
+      description: description || `Chat for ${name}`,
+      category: 'Groups',
+      members: [ownerId],
+      groupId: id,
+    });
+    const group: DevGroup = { id, name, description, ownerId, channelId: channel.id, members: [ownerId], createdAt: new Date().toISOString() };
+    this.data.groups.push(group);
+    this.save();
+    return { group, channel };
+  }
+
+  /** Join, or leave when already a member. Returns the group and whether the user is now in it. */
+  toggleGroupMembership(id: string, userId: string): { group: DevGroup; joined: boolean } | undefined {
+    const group = this.getGroup(id);
+    if (!group) return undefined;
+    const channel = this.getChannel(group.channelId);
+    const joined = !group.members.includes(userId);
+    group.members = joined ? [...group.members, userId] : group.members.filter((m) => m !== userId);
+    if (channel) channel.members = [...group.members];
+    this.save();
+    return { group, joined };
   }
 
   // ---------- Agent workflows ----------

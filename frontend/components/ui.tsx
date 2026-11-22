@@ -106,13 +106,30 @@ export function StatusDot({ status, className }: { status: PresenceStatus; class
   return <span className={cx('block h-2 w-2 rounded-full', STATUS_COLOR[status], className)} aria-label={status} />;
 }
 
-export function Avatar({ emoji, size = 32, status, className }: { emoji: string; size?: number; status?: PresenceStatus; className?: string }) {
+export function Avatar({
+  emoji,
+  size = 32,
+  status,
+  className,
+  src,
+}: {
+  emoji: string;
+  size?: number;
+  status?: PresenceStatus;
+  className?: string;
+  /** Profile photo. Falls back to the emoji when there is none. */
+  src?: string;
+}) {
   return (
     <span
       className={cx('relative inline-flex flex-shrink-0 items-center justify-center rounded-[28%] bg-subtle select-none', className)}
       style={{ width: size, height: size, fontSize: size * 0.5 }}
     >
-      <span aria-hidden="true">{emoji}</span>
+      {src ? (
+        <img src={src} alt="" loading="lazy" className="h-full w-full rounded-[28%] object-cover" />
+      ) : (
+        <span aria-hidden="true">{emoji}</span>
+      )}
       {status && (
         <span className="absolute -right-0.5 -bottom-0.5 rounded-full bg-surface p-[2px]">
           <StatusDot status={status} />

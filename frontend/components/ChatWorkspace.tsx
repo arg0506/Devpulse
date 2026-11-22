@@ -15,12 +15,17 @@ import {
   Sparkles,
   CalendarDays,
   PenSquare,
+  UsersRound,
+  Link2,
+  Video,
+  ExternalLink,
 } from 'lucide-react';
 import { socket } from '../socket';
 import { useWorkspace, channelLabel } from '../lib/workspace';
-import { DevChannel, DevMessage, ThreadReply } from '../types';
+import { DevChannel, DevMessage, LinkCard, ThreadReply } from '../types';
 import { Markdown, CodeBlock } from '../lib/markdown';
 import { dayLabel, timeShort } from '../lib/format';
+import { avatarSrc } from '../lib/profile';
 import { Avatar, Button, EmptyState, IconButton, Modal, ViewHeader, cx } from './ui';
 
 const QUICK_REACTIONS = ['👍', '❤️', '🎉', '🚀', '👀', '😂'];
@@ -32,6 +37,7 @@ function Sidebar({ onNewChannel, onNewDM, onNavigate }: { onNewChannel: () => vo
   const { channels, activeChannelId, openChannel, unread, user, presenceOf } = useWorkspace();
   const rooms = channels.filter((c) => c.category === 'Channels' || c.category === 'Guilds');
   const dms = channels.filter((c) => c.category === 'Direct Messages');
+  const groups = channels.filter((c) => c.category === 'Groups');
 
   const item = (c: DevChannel, icon: React.ReactNode, label: string) => {
     const count = unread[c.id] || 0;
@@ -88,6 +94,15 @@ function Sidebar({ onNewChannel, onNewDM, onNavigate }: { onNewChannel: () => vo
           )}
         </ul>
 
+        {groups.length > 0 && (
+          <>
+            <div className="mt-5 mb-1 flex items-center justify-between px-2">
+              <span className="eyebrow">Groups</span>
+            </div>
+            <ul className="space-y-px">{groups.map((c) => item(c, <UsersRound size={14} className="flex-shrink-0 text-ink-3" />, c.name))}</ul>
+          </>
+        )}
+
         <div className="mt-5 mb-1 flex items-center justify-between px-2">
           <span className="eyebrow">Direct messages</span>
           <IconButton label="New direct message" onClick={onNewDM} className="h-6 w-6">
@@ -107,7 +122,16 @@ function Sidebar({ onNewChannel, onNewDM, onNavigate }: { onNewChannel: () => vo
             {dms.map((c) => {
               const otherId = (c.members || []).find((m) => m !== user.id) || user.id;
               const p = presenceOf(otherId);
-              return item(c, <Avatar emoji={p?.avatarEmoji || '👤'} size={18} status={p?.status} />, channelLabel(c, user.id, presenceOf));
+              return item(
+                c,
+                <Avatar
+                  emoji={p?.avatarEmoji || '👤'}
+                  size={18}
+                  status={p?.status}
+                  src={avatarSrc(otherId, p?.hasAvatar, p?.avatarVersion)}
+                />,
+                channelLabel(c, user.id, presenceOf),
+              );
             })}
           </ul>
         )}
@@ -144,10 +168,38 @@ function Reactions({ msg, onToggle }: { msg: DevMessage; onToggle: (emoji: strin
   );
 }
 
+const KIND_LABEL: Record<LinkCard['kind'], string> = { event: 'Event', call: 'Call', community: 'Community', link: 'Link' };
+
+/** Card for an event or call link shared in chat: the platform, where it goes, and one button to open it. */
+function LinkCardView({ card }: { card: LinkCard }) {
+  const Icon = card.kind === 'call' ? Video : card.kind === 'event' ? CalendarDays : card.kind === 'community' ? UsersRound : Link2;
+  return (
+    <a
+      href={card.url}
+      target="_blank"
+      rel="noreferrer noopener"
+      className="mt-2 flex max-w-md items-center gap-3 rounded-xl border border-line bg-canvas px-3.5 py-3 transition-colors hover:border-line-strong"
+    >
+      <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-surface text-accent">
+        <Icon size={16} />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="eyebrow block text-accent">
+          {card.platform} · {KIND_LABEL[card.kind]}
+        </span>
+        <span className="block truncate text-[13px] text-ink">{card.host}</span>
+      </span>
+      <ExternalLink size={14} className="flex-shrink-0 text-ink-3" />
+    </a>
+  );
+}
+
 function MessageRow({ msg, compact, onThread }: { msg: DevMessage; compact: boolean; onThread: (m: DevMessage) => void }) {
-  const { user, showProfile } = useWorkspace();
+  const { user, showProfile, presenceOf } = useWorkspace();
   const [picker, setPicker] = useState(false);
   const mine = msg.userId === user.id;
+  const author = presenceOf(msg.userId);
+  const photo = avatarSrc(msg.userId, author?.hasAvatar, author?.avatarVersion);
   const react = (emoji: string) => {
     socket.emit('message:react', { messageId: msg.id, emoji });
     setPicker(false);
@@ -158,7 +210,7 @@ function MessageRow({ msg, compact, onThread }: { msg: DevMessage; compact: bool
       <div className="w-8 flex-shrink-0">
         {!compact ? (
           <button type="button" onClick={() => showProfile(msg.userId)} aria-label={`View @${msg.username}`}>
-            <Avatar emoji={msg.avatarEmoji} size={32} />
+            <Avatar emoji={msg.avatarEmoji} size={32} src={photo} />
           </button>
         ) : (
           <span className="block pt-1 text-right font-mono text-[10px] text-ink-3 opacity-0 group-hover:opacity-100">{timeShort(msg.timestamp)}</span>
@@ -181,6 +233,7 @@ function MessageRow({ msg, compact, onThread }: { msg: DevMessage; compact: bool
         )}
         {msg.text && <Markdown text={msg.text} />}
         {msg.codeSnippet && <CodeBlock code={msg.codeSnippet.code} language={msg.codeSnippet.language} title={msg.codeSnippet.title} />}
+        {msg.linkCard && <LinkCardView card={msg.linkCard} />}
         <Reactions msg={msg} onToggle={react} />
         {msg.repliesCount > 0 && (
           <button
@@ -249,12 +302,14 @@ function Composer({
   placeholder,
   onSend,
   onSnippet,
+  onShareLink,
   onTyping,
   autoFocusKey,
 }: {
   placeholder: string;
   onSend: (text: string) => void;
   onSnippet?: () => void;
+  onShareLink?: () => void;
   onTyping?: () => void;
   autoFocusKey?: string;
 }) {
@@ -304,6 +359,11 @@ function Composer({
           {onSnippet && (
             <IconButton label="Share a code snippet" onClick={onSnippet}>
               <Code2 size={15} />
+            </IconButton>
+          )}
+          {onShareLink && (
+            <IconButton label="Share an event or call link" onClick={onShareLink}>
+              <Link2 size={15} />
             </IconButton>
           )}
           <span className="ml-1 hidden text-[11.5px] text-ink-3 sm:inline">
@@ -390,7 +450,8 @@ function ThreadPanel({ parent, onClose }: { parent: DevMessage; onClose: () => v
 
 function MembersPanel({ channel, onClose }: { channel?: DevChannel; onClose: () => void }) {
   const { presences, showProfile, user } = useWorkspace();
-  const visible = channel?.category === 'Direct Messages' ? presences.filter((p) => (channel.members || []).includes(p.userId)) : presences;
+  const memberScoped = channel?.category === 'Direct Messages' || channel?.category === 'Groups';
+  const visible = memberScoped ? presences.filter((p) => (channel?.members || []).includes(p.userId)) : presences;
   const online = visible.filter((p) => p.status !== 'offline');
   const offline = visible.filter((p) => p.status === 'offline');
   const row = (p: (typeof presences)[number]) => (
@@ -400,10 +461,10 @@ function MembersPanel({ channel, onClose }: { channel?: DevChannel; onClose: () 
         onClick={() => showProfile(p.userId)}
         className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left hover:bg-subtle"
       >
-        <Avatar emoji={p.avatarEmoji} size={28} status={p.status} />
+        <Avatar emoji={p.avatarEmoji} size={28} status={p.status} src={avatarSrc(p.userId, p.hasAvatar, p.avatarVersion)} />
         <div className="min-w-0">
           <p className={cx('truncate text-[13px]', p.status === 'offline' ? 'text-ink-3' : 'text-ink')}>
-            {p.username} {p.userId === user.id && <span className="text-ink-3">(you)</span>}
+            {p.displayName || p.username} {p.userId === user.id && <span className="text-ink-3">(you)</span>}
           </p>
           <p className="truncate text-[11.5px] text-ink-3">{p.customStatus || p.role}</p>
         </div>
@@ -455,6 +516,8 @@ export default function ChatWorkspace() {
   const [newChannel, setNewChannel] = useState({ name: '', description: '', error: '' });
   const [dmModal, setDmModal] = useState(false);
   const [dmQuery, setDmQuery] = useState('');
+  const [linkModal, setLinkModal] = useState(false);
+  const [linkForm, setLinkForm] = useState({ url: '', note: '', error: '' });
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
@@ -580,6 +643,20 @@ export default function ChatWorkspace() {
       setNewChannel({ name: '', description: '', error: '' });
       if (res?.channel) openChannel(res.channel.id);
     });
+  };
+
+  const shareLink = (e: React.FormEvent) => {
+    e.preventDefault();
+    let url: URL;
+    try {
+      url = new URL(/^https?:\/\//i.test(linkForm.url.trim()) ? linkForm.url.trim() : `https://${linkForm.url.trim()}`);
+    } catch {
+      return setLinkForm((f) => ({ ...f, error: 'Paste a full web address, such as a Meetup or Luma link.' }));
+    }
+    const note = linkForm.note.trim();
+    send(note ? `${note}\n${url.toString()}` : url.toString());
+    setLinkModal(false);
+    setLinkForm({ url: '', note: '', error: '' });
   };
 
   const openThread = (m: DevMessage) => {
@@ -739,6 +816,7 @@ export default function ChatWorkspace() {
             onSend={send}
             onTyping={noteTyping}
             onSnippet={() => setSnippetOpen(true)}
+            onShareLink={() => setLinkModal(true)}
           />
         </div>
       </section>
@@ -861,6 +939,50 @@ export default function ChatWorkspace() {
             />
           </div>
           {newChannel.error && <p className="text-[12.5px] text-err">{newChannel.error}</p>}
+        </form>
+      </Modal>
+
+      <Modal
+        open={linkModal}
+        onClose={() => setLinkModal(false)}
+        title="Share an event or link"
+        description="Meetup, Luma, Eventbrite, Partiful, Zoom, Google Meet, Discord and any other web link get a card."
+        footer={
+          <>
+            <Button onClick={() => setLinkModal(false)}>Cancel</Button>
+            <Button variant="primary" type="submit" form="link-form" disabled={!linkForm.url.trim()}>
+              Share link
+            </Button>
+          </>
+        }
+      >
+        <form id="link-form" onSubmit={shareLink} className="space-y-3">
+          <div>
+            <label className="label" htmlFor="lk-url">
+              Link
+            </label>
+            <input
+              id="lk-url"
+              className="field"
+              placeholder="https://lu.ma/your-event"
+              value={linkForm.url}
+              onChange={(e) => setLinkForm({ ...linkForm, url: e.target.value, error: '' })}
+            />
+          </div>
+          <div>
+            <label className="label" htmlFor="lk-note">
+              Note <span className="font-normal text-ink-3">· optional</span>
+            </label>
+            <input
+              id="lk-note"
+              className="field"
+              maxLength={200}
+              placeholder="Thursday talk on edge caching, bring questions"
+              value={linkForm.note}
+              onChange={(e) => setLinkForm({ ...linkForm, note: e.target.value })}
+            />
+          </div>
+          {linkForm.error && <p className="text-[12.5px] text-err">{linkForm.error}</p>}
         </form>
       </Modal>
 

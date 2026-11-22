@@ -2,7 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { socket } from '../socket';
 import { ChatPresence, DevChannel, DevUser } from '../types';
 
-export type View = 'chat' | 'communities' | 'events' | 'board' | 'agents';
+export type View = 'chat' | 'groups' | 'communities' | 'events' | 'board' | 'agents';
 export type Theme = 'light' | 'dark';
 
 interface WorkspaceValue {
@@ -95,6 +95,10 @@ export function WorkspaceProvider({
       if (!list.some((c) => c.id === channelRef.current)) setActiveChannelId('general');
     };
     const onChannelNew = (chan: DevChannel) => setChannels((prev) => (prev.some((c) => c.id === chan.id) ? prev : [...prev, chan]));
+    const onChannelRemoved = ({ channelId }: { channelId: string }) => {
+      setChannels((prev) => prev.filter((c) => c.id !== channelId));
+      if (channelRef.current === channelId) setActiveChannelId('general');
+    };
     const onActivity = ({ channelId, userId }: { channelId: string; userId?: string }) => {
       setBeats((prev) => [...prev.filter((t) => Date.now() - t < 60000), Date.now()]);
       if (userId === user.id) return;
@@ -110,6 +114,7 @@ export function WorkspaceProvider({
     socket.on('connect_error', onConnectError);
     socket.on('init:channels', onChannels);
     socket.on('channel:new', onChannelNew);
+    socket.on('channel:removed', onChannelRemoved);
     socket.on('presence:list', setPresences);
     socket.on('channel:activity', onActivity);
     socket.on('user:updated', onUserUpdated);
@@ -121,6 +126,7 @@ export function WorkspaceProvider({
       socket.off('connect_error', onConnectError);
       socket.off('init:channels', onChannels);
       socket.off('channel:new', onChannelNew);
+      socket.off('channel:removed', onChannelRemoved);
       socket.off('presence:list', setPresences);
       socket.off('channel:activity', onActivity);
       socket.off('user:updated', onUserUpdated);

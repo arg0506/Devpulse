@@ -14,6 +14,10 @@ A live workspace for developer teams. Channels, a shared whiteboard, a visual AI
 
 **Communities and events.** Join or leave communities, each with its own channels. Schedule events with a date, call link and community, RSVP, and open a discussion channel per event.
 
+**Groups.** Anyone can create a community group, find it under Groups and join it. Each group has its own real-time chat in the sidebar, with history visible only to members. Share an event or call link from Meetup, Luma, Eventbrite, Partiful, Zoom, Google Meet, Discord and other platforms; the link becomes a card showing the platform.
+
+**Profiles.** Each developer has a public profile: a photo (resized in the browser and stored on the server), a display name, bio, location, skills, status, and links to GitHub, LinkedIn, X, Stack Overflow, dev.to, Medium, YouTube, Hashnode, Kaggle, CodePen and a website. Links must point to their own site.
+
 **Whiteboard.** One board shared by everyone: select and move, pen, rectangle, ellipse, line, arrow, text and a real eraser. Live strokes and cursors, pan and zoom, undo for your own shapes, PNG export. Colours follow the light/dark theme.
 
 **Agent studio.** Build workflows on a canvas from five step types and run them for real:

@@ -10,6 +10,8 @@ import communitiesRouter from './backend/routes/communities';
 import eventsRouter from './backend/routes/events';
 import paymentsRouter from './backend/routes/payments';
 import agentsRouter from './backend/routes/agents';
+import groupsRouter from './backend/routes/groups';
+import usersRouter from './backend/routes/users';
 import { checkPrismaConnection, isPrismaEnabled } from './backend/prismaClient';
 import { authMiddleware, AuthenticatedRequest } from './backend/middleware/auth';
 import { buildPresenceList } from './backend/realtime';
@@ -30,6 +32,8 @@ async function startServer() {
   app.use('/api/events', eventsRouter);
   app.use('/api/payments', paymentsRouter);
   app.use('/api/agents', agentsRouter);
+  app.use('/api/groups', groupsRouter);
+  app.use('/api/users', usersRouter);
 
   app.get('/api/health', (_req, res) => {
     res.json({

@@ -6,6 +6,7 @@ import { generateText, isGeminiReady, GEMINI_MODEL } from './gemini';
 import { setIO, connectionCounts, broadcastPresence } from './realtime';
 import { DevMessage, DevUser, ThreadReply, WhiteboardElement, CodeSnippet } from '../frontend/types';
 import prisma, { isPrismaEnabled } from './prismaClient';
+import { detectLinkCard } from './linkCards';
 
 const MAX_MESSAGE_LENGTH = 8000;
 
@@ -149,7 +150,7 @@ export function initSockets(server: HTTPServer) {
     db.addMessage(msg);
     io.to(`channel:${msg.channelId}`).emit('message:new', msg);
     const channel = db.getChannel(msg.channelId);
-    if (channel?.category === 'Direct Messages') {
+    if (channel?.category === 'Direct Messages' || channel?.category === 'Groups') {
       (channel.members || []).forEach((id) =>
         io.to(`user:${id}`).emit('channel:activity', { channelId: msg.channelId, messageId: msg.id, userId: msg.userId }),
       );
@@ -267,6 +268,8 @@ export function initSockets(server: HTTPServer) {
 
       const author = me();
       const msg = messageFrom(author, channelId, text, snippet);
+      const linkCard = detectLinkCard(text);
+      if (linkCard) msg.linkCard = linkCard;
       publish(msg);
       mirrorMessage(msg);
       db.incrementXp(userId, 5);
@@ -399,7 +402,9 @@ export function initSockets(server: HTTPServer) {
           break;
         }
         case 'channels': {
-          const list = db.getChannelsForUser(userId).filter((ch) => ch.category === 'Channels' || ch.category === 'Guilds');
+          const list = db
+            .getChannelsForUser(userId)
+            .filter((ch) => ch.category === 'Channels' || ch.category === 'Guilds' || ch.category === 'Groups');
           respond(
             list
               .map((ch) => `  ${c('accent', '#' + ch.name)}  ${c('muted', `${db.getMessages(ch.id, 100000).length} msgs`)}  ${ch.description}`)

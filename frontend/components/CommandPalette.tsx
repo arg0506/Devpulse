@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Hash, MessagesSquare, Users, CalendarDays, PenTool, Workflow, SquareTerminal, SunMoon, User, CornerDownLeft } from 'lucide-react';
+import { Hash, MessagesSquare, Users, UsersRound, CalendarDays, PenTool, Workflow, SquareTerminal, SunMoon, User, CornerDownLeft } from 'lucide-react';
 import { useWorkspace, channelLabel } from '../lib/workspace';
 import { Avatar, Kbd, cx } from './ui';
 
@@ -66,6 +66,7 @@ export default function CommandPalette() {
           run: close(() => openDM(p.userId)),
         })),
       { id: 'v-chat', group: 'Go to', label: 'Chat', icon: <MessagesSquare size={15} />, run: close(() => setView('chat')) },
+      { id: 'v-groups', group: 'Go to', label: 'Groups', icon: <UsersRound size={15} />, run: close(() => setView('groups')) },
       { id: 'v-comm', group: 'Go to', label: 'Communities', icon: <Users size={15} />, run: close(() => setView('communities')) },
       { id: 'v-events', group: 'Go to', label: 'Events', icon: <CalendarDays size={15} />, run: close(() => setView('events')) },
       { id: 'v-board', group: 'Go to', label: 'Whiteboard', icon: <PenTool size={15} />, run: close(() => setView('board')) },

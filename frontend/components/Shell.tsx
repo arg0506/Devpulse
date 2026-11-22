@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { MessagesSquare, Users, CalendarDays, PenTool, Workflow, SquareTerminal, Sun, Moon, Search } from 'lucide-react';
+import { MessagesSquare, Users, UsersRound, CalendarDays, PenTool, Workflow, SquareTerminal, Sun, Moon, Search } from 'lucide-react';
 import { useWorkspace, View } from '../lib/workspace';
+import { avatarSrc } from '../lib/profile';
 import { Avatar, Kbd, PulseMark, cx } from './ui';
 import ChatWorkspace from './ChatWorkspace';
 import CommunitiesView from './CommunitiesView';
+import GroupsView from './GroupsView';
 import EventsView from './EventsView';
 import Whiteboard from './Whiteboard';
 import AgentWorkflowBuilder from './AgentWorkflowBuilder';
@@ -14,6 +16,7 @@ import { SettingsModal, UserCardModal } from './ProfileModals';
 
 const NAV: { view: View; label: string; icon: typeof MessagesSquare }[] = [
   { view: 'chat', label: 'Chat', icon: MessagesSquare },
+  { view: 'groups', label: 'Groups', icon: UsersRound },
   { view: 'communities', label: 'Communities', icon: Users },
   { view: 'events', label: 'Events', icon: CalendarDays },
   { view: 'board', label: 'Whiteboard', icon: PenTool },
@@ -88,7 +91,7 @@ function Rail() {
           title="Profile and settings"
           className="mt-1 rounded-xl p-1 hover:bg-subtle"
         >
-          <Avatar emoji={user.avatarEmoji} size={30} status={status} />
+          <Avatar emoji={user.avatarEmoji} size={30} status={status} src={avatarSrc(user.id, !!user.avatarImage, user.avatarVersion)} />
         </button>
       </div>
     </nav>
@@ -179,6 +182,7 @@ export default function Shell() {
         <main className="flex min-w-0 flex-1 flex-col">
           <div className="relative min-h-0 flex-1">
             {pane('chat', <ChatWorkspace />)}
+            {pane('groups', <GroupsView />)}
             {pane('communities', <CommunitiesView />)}
             {pane('events', <EventsView />)}
             {pane('board', <Whiteboard active={view === 'board'} />)}
