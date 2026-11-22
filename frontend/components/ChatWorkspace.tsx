@@ -23,6 +23,7 @@ import {
   ChevronDown,
   Settings,
   Volume2,
+  ChevronRight,
 } from 'lucide-react';
 import { SocialModal, useSocial } from './SocialModal';
 import VoiceRoom from './VoiceRoom';
@@ -56,6 +57,8 @@ function Sidebar({
   onSocial: () => void;
 }) {
   const { channels, activeChannelId, openChannel, unread, user, presenceOf, setView } = useWorkspace();
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const toggleSection = (key: string) => setCollapsed((prev) => ({ ...prev, [key]: !prev[key] }));
   const rooms = channels.filter((c) => (c.category === 'Channels' || c.category === 'Guilds') && c.kind !== 'voice');
   const voices = channels.filter((c) => c.kind === 'voice');
   const dms = channels.filter((c) => c.category === 'Direct Messages');
@@ -117,12 +120,12 @@ function Sidebar({
           ))}
         </ul>
         <div className="mb-1 flex items-center justify-between px-2">
-          <span className="eyebrow">Channels</span>
+          <button type="button" onClick={() => toggleSection('channels')} aria-expanded={!collapsed.channels} className="eyebrow flex items-center gap-1 hover:text-ink"><ChevronRight size={12} className={cx('transition-transform', !collapsed.channels && 'rotate-90')} />Channels</button>
           <IconButton label="New channel" onClick={onNewChannel} className="h-6 w-6">
             <Plus size={14} />
           </IconButton>
         </div>
-        <ul className="space-y-px">
+        <ul className="space-y-px" hidden={collapsed.channels}>
           {rooms.map((c) =>
             item(
               c,
@@ -137,16 +140,16 @@ function Sidebar({
         </ul>
 
         <div className="mt-5 mb-1 flex items-center justify-between px-2">
-          <span className="eyebrow">Voice</span>
+          <button type="button" onClick={() => toggleSection('voice')} aria-expanded={!collapsed.voice} className="eyebrow flex items-center gap-1 hover:text-ink"><ChevronRight size={12} className={cx('transition-transform', !collapsed.voice && 'rotate-90')} />Voice</button>
         </div>
         {voices.length === 0 ? (
           <p className="px-2 py-1 text-[12.5px] text-ink-3">No voice channels yet</p>
         ) : (
-          <ul className="space-y-px">{voices.map((c) => item(c, <Volume2 size={15} className="flex-shrink-0 text-ink-3" />, c.name))}</ul>
+          <ul className="space-y-px" hidden={collapsed.voice}>{voices.map((c) => item(c, <Volume2 size={15} className="flex-shrink-0 text-ink-3" />, c.name))}</ul>
         )}
 
         <div className="mt-5 mb-1 flex items-center justify-between px-2">
-          <span className="eyebrow">Groups</span>
+          <button type="button" onClick={() => toggleSection('groups')} aria-expanded={!collapsed.groups} className="eyebrow flex items-center gap-1 hover:text-ink"><ChevronRight size={12} className={cx('transition-transform', !collapsed.groups && 'rotate-90')} />Groups</button>
           <IconButton label="New group" onClick={onNewGroup} className="h-6 w-6">
             <Plus size={14} />
           </IconButton>
@@ -160,13 +163,13 @@ function Sidebar({
             Start a group
           </button>
         ) : (
-          <ul className="space-y-px">
+          <ul className="space-y-px" hidden={collapsed.groups}>
             {groups.map((c) => item(c, <span className="flex h-[18px] w-[18px] items-center justify-center text-[13px] leading-none">{c.icon || '👥'}</span>, c.name))}
           </ul>
         )}
 
         <div className="mt-5 mb-1 flex items-center justify-between px-2">
-          <span className="eyebrow">Direct messages</span>
+          <button type="button" onClick={() => toggleSection('dms')} aria-expanded={!collapsed.dms} className="eyebrow flex items-center gap-1 hover:text-ink"><ChevronRight size={12} className={cx('transition-transform', !collapsed.dms && 'rotate-90')} />Direct messages</button>
           <IconButton label="New direct message" onClick={onNewDM} className="h-6 w-6">
             <Plus size={14} />
           </IconButton>
@@ -180,7 +183,7 @@ function Sidebar({
             Start a conversation
           </button>
         ) : (
-          <ul className="space-y-px">
+          <ul className="space-y-px" hidden={collapsed.dms}>
             {dms.map((c) => {
               const otherId = (c.members || []).find((m) => m !== user.id) || user.id;
               const p = presenceOf(otherId);
