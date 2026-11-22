@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ArrowRight, Building2, Check, Database, Hash, KeyRound, Link2, PenTool, Plus, Rocket, Server, Shield, Sprout, Users, Webhook, Workflow } from 'lucide-react';
 import { Wordmark, cx } from './ui';
+import { FEATURE_ILLO, Illo, SELF_HOST_ILLO, STEP_ILLO } from './Illustrations';
 
 interface LandingPageProps {
   onGetStarted: (plan?: 'pro' | 'enterprise') => void;
@@ -302,7 +303,10 @@ export default function LandingPage({ onGetStarted, onSignIn }: LandingPageProps
                   >
                     <Icon size={20} strokeWidth={2.2} />
                   </span>
-                  <h3 className="mt-8 font-display text-[22px] leading-tight font-bold tracking-[-0.02em]">{title}</h3>
+                  <div className="mt-8 transition-transform duration-500 group-hover:-translate-y-1 group-hover:scale-[1.03]">
+                    <Illo name={FEATURE_ILLO[title]} />
+                  </div>
+                  <h3 className="mt-7 font-display text-[22px] leading-tight font-bold tracking-[-0.02em]">{title}</h3>
                   <p className={cx('mt-3 text-[14.5px] leading-relaxed', tone === 'blue' ? 'text-white/80' : 'text-[#0a0b0d]/60')}>{body}</p>
                 </article>
               </Reveal>
@@ -322,7 +326,10 @@ export default function LandingPage({ onGetStarted, onSignIn }: LandingPageProps
               <Reveal key={s.n} delay={i * 120} className="h-full">
                 <div className="group flex h-full flex-col rounded-3xl bg-white p-8 transition-all duration-300 hover:-translate-y-1.5 hover:shadow-[0_24px_50px_-20px_rgba(10,26,79,0.3)]">
                   <span className="flex h-14 w-14 items-center justify-center rounded-full bg-[#0a0b0d] font-display text-[18px] font-bold text-white">{s.n}</span>
-                  <h3 className="mt-8 font-display text-[24px] leading-tight font-bold tracking-[-0.02em]">{s.title}</h3>
+                  <div className="mt-8 transition-transform duration-500 group-hover:-translate-y-1 group-hover:scale-[1.03]">
+                    <Illo name={STEP_ILLO[i]} />
+                  </div>
+                  <h3 className="mt-7 font-display text-[24px] leading-tight font-bold tracking-[-0.02em]">{s.title}</h3>
                   <p className="mt-3 text-[15px] leading-relaxed text-[#0a0b0d]/60">{s.body}</p>
                 </div>
               </Reveal>
@@ -378,6 +385,9 @@ export default function LandingPage({ onGetStarted, onSignIn }: LandingPageProps
                   <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#eef2ff] text-[#2f5bff]">
                     <Icon size={18} />
                   </span>
+                  <div className="mt-6 transition-transform duration-500 group-hover:-translate-y-1 group-hover:scale-[1.03]">
+                    <Illo name={SELF_HOST_ILLO[title]} />
+                  </div>
                   <h3 className="mt-6 font-display text-[18px] font-bold">{title}</h3>
                   <p className="mt-2 text-[14px] leading-relaxed text-[#0a0b0d]/60">{body}</p>
                 </div>
