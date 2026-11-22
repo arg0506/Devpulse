@@ -40,7 +40,7 @@ const SUGGESTIONS = ['help', 'whoami', 'users', 'stats', 'events', 'ai '];
 
 export default function Terminal({ onClose }: { onClose: () => void }) {
   const { user } = useWorkspace();
-  const [lines, setLines] = useState<Line[]>([{ text: 'DevPulse console. Type [[accent]help] for commands.', kind: 'output' }]);
+  const [lines, setLines] = useState<Line[]>([{ text: 'Lemo console. Type [[accent]help] for commands.', kind: 'output' }]);
   const [value, setValue] = useState('');
   const [history, setHistory] = useState<string[]>([]);
   const [cursor, setCursor] = useState(-1);

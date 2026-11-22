@@ -54,6 +54,10 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'Usernames use 3–20 lowercase letters, numbers or underscores.' });
     }
     if (String(password).length < 8) return res.status(400).json({ error: 'Passwords need at least 8 characters.' });
+    // bcrypt ignores everything past 72 bytes, so a longer password would not be what the user typed.
+    if (Buffer.byteLength(String(password), 'utf8') > 72) {
+      return res.status(400).json({ error: 'Passwords can be at most 72 bytes long.' });
+    }
 
     const lowerEmail = String(email).toLowerCase();
     const passwordHash = await bcrypt.hash(String(password), 10);

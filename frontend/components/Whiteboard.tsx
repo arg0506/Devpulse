@@ -456,7 +456,7 @@ export default function Whiteboard({ active }: { active: boolean }) {
     ctx.fillRect(0, 0, out.width, out.height);
     ctx.drawImage(canvas, 0, 0);
     const a = document.createElement('a');
-    a.download = `devpulse-board-${new Date().toISOString().slice(0, 10)}.png`;
+    a.download = `lemo-board-${new Date().toISOString().slice(0, 10)}.png`;
     a.href = out.toDataURL('image/png');
     a.click();
   };

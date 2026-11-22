@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { DevUser } from './types';
-import { api, getToken, setToken } from './lib/api';
+import { api, ApiError, getToken, setToken } from './lib/api';
 import { socket } from './socket';
 import { WorkspaceProvider } from './lib/workspace';
 import LandingPage from './components/LandingPage';
 import AuthScreen from './components/AuthScreen';
 import Shell from './components/Shell';
-import { PulseMark } from './components/ui';
+import { LemoMark } from './components/ui';
 
 type Screen = 'loading' | 'landing' | 'signin' | 'register' | 'app';
 
@@ -23,8 +23,9 @@ export default function App() {
         setUser(me);
         setScreen('app');
       })
-      .catch(() => {
-        setToken(null);
+      .catch((err) => {
+        // Only a rejected session clears the token; a network error keeps it for the next visit.
+        if (err instanceof ApiError && err.status < 500) setToken(null);
         setScreen('landing');
       });
   }, []);
@@ -40,7 +41,7 @@ export default function App() {
   if (screen === 'loading') {
     return (
       <div className="flex h-full items-center justify-center bg-canvas">
-        <PulseMark size={36} className="animate-pulse" />
+        <LemoMark size={36} className="animate-pulse" />
       </div>
     );
   }

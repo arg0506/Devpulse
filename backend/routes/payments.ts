@@ -37,7 +37,7 @@ router.post('/create-payment-intent', authMiddleware, async (req: AuthenticatedR
         amount: plan.amountCents,
         currency: 'usd',
         metadata: { userId: req.user!.userId, plan: planKey },
-        description: `DevPulse ${plan.name}`,
+        description: `Lemo ${plan.name}`,
         automatic_payment_methods: { enabled: true },
       });
       return res.json({ clientSecret: intent.client_secret, paymentIntentId: intent.id, isDemo: false, plan: planKey });

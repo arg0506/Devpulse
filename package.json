@@ -1,5 +1,5 @@
 {
-  "name": "devpulse",
+  "name": "lemo",
   "private": true,
   "version": "1.0.0",
   "type": "module",
@@ -10,7 +10,7 @@
     "lint": "tsc --noEmit",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
-    "postinstall": "prisma generate || echo \"Prisma client not generated; DevPulse will use the JSON store.\"",
+    "postinstall": "prisma generate || echo \"Prisma client not generated; Lemo will use the JSON store.\"",
     "clean": "rm -rf dist"
   },
   "dependencies": {

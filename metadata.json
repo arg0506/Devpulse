@@ -1,5 +1,5 @@
 {
-  "name": "DevPulse",
+  "name": "Lemo",
   "description": "Real-time developer collaboration, community chat, and interactive code workspace.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

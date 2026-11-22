@@ -153,7 +153,7 @@ router.post('/dispatch', async (req: AuthenticatedRequest, res: Response) => {
     }
   }
 
-  // Default: post into a DevPulse channel as the agent.
+  // Default: post into a Lemo channel as the agent.
   const channelId = String(channel || 'general').replace(/^#/, '');
   const target = db.getChannel(channelId);
   if (!target || target.category === 'Direct Messages') {

@@ -8,21 +8,49 @@ export function cx(...parts: (string | false | null | undefined)[]) {
 
 // ---------- Brand ----------
 
-/** The DevPulse mark: a single heartbeat trace in a rounded ink tile. */
-export function PulseMark({ size = 28, className }: { size?: number; className?: string }) {
+/**
+ * The Lemo mark: a sticker-style tile, tilted and offset, with an L whose foot
+ * turns into a heartbeat and a sparkle in the corner.
+ */
+export function LemoMark({ size = 28, className }: { size?: number; className?: string }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 32 32" className={className} aria-hidden="true">
-      <rect width="32" height="32" rx="8" className="fill-ink" />
-      <path d="M5 17h6l2.5-7 4 13 2.5-6H27" fill="none" stroke="var(--c-accent)" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+    <svg width={size} height={size} viewBox="0 0 48 48" className={className} aria-hidden="true">
+      <g transform="rotate(-8 24 24)">
+        <rect x="7" y="7" width="40" height="40" rx="12" fill="#f2545b" />
+        <rect x="4" y="4" width="40" height="40" rx="12" fill="#111318" />
+        <path
+          d="M15 12 V31 H24 L27 25 L30 35 L33 28 H36"
+          fill="none"
+          stroke="#ffd23f"
+          strokeWidth="4.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <path d="M40 2 L41.6 6.4 L46 8 L41.6 9.6 L40 14 L38.4 9.6 L34 8 L38.4 6.4 Z" fill="#7cc4ff" />
+      </g>
     </svg>
   );
 }
 
+// Each letter of the wordmark gets its own colour and bounces on hover.
+const WORDMARK_LETTERS = [
+  { letter: 'l', color: '#f2545b' },
+  { letter: 'e', color: '#ff9f43' },
+  { letter: 'm', color: '#3ddc97' },
+  { letter: 'o', color: '#b49cff' },
+];
+
 export function Wordmark({ className }: { className?: string }) {
   return (
     <span className={cx('inline-flex items-center gap-2', className)}>
-      <PulseMark size={24} />
-      <span className="font-display text-[17px] font-semibold tracking-[-0.02em] text-ink">DevPulse</span>
+      <LemoMark size={30} />
+      <span className="font-display text-[24px] leading-none font-extrabold tracking-[-0.04em]">
+        {WORDMARK_LETTERS.map(({ letter, color }) => (
+          <span key={letter} className="inline-block transition-transform duration-200 hover:-translate-y-1" style={{ color }}>
+            {letter}
+          </span>
+        ))}
+      </span>
     </span>
   );
 }
@@ -33,7 +61,7 @@ type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
 type ButtonSize = 'sm' | 'md' | 'lg';
 
 const VARIANTS: Record<ButtonVariant, string> = {
-  primary: 'bg-ink text-inverse hover:opacity-90 border border-transparent',
+  primary: 'brand-gradient text-[#0a0b0d] hover:opacity-90 border border-transparent',
   secondary: 'bg-surface text-ink border border-line hover:border-line-strong hover:bg-subtle',
   ghost: 'text-ink-2 hover:text-ink hover:bg-subtle border border-transparent',
   danger: 'bg-surface text-err border border-line hover:border-err/40 hover:bg-err/5',

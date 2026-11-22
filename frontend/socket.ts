@@ -1,7 +1,7 @@
 import { io } from 'socket.io-client';
 import { getToken } from './lib/api';
 
-/** One shared connection to the DevPulse server. Connect after sign-in. */
+/** One shared connection to the Lemo server. Connect after sign-in. */
 export const socket = io({
   autoConnect: false,
   reconnection: true,

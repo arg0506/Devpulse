@@ -1034,7 +1034,7 @@ export default function AgentWorkflowBuilder() {
                       value={selected.config.dispatchType || 'channel'}
                       onChange={(e) => updateConfig(selected.id, { dispatchType: e.target.value as any })}
                     >
-                      <option value="channel">A DevPulse channel</option>
+                      <option value="channel">A Lemo channel</option>
                       <option value="webhook">A webhook (Slack, Discord, any https URL)</option>
                     </select>
                   </div>

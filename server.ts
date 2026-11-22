@@ -74,11 +74,11 @@ async function startServer() {
   }
 
   server.listen(PORT, '0.0.0.0', () => {
-    console.log(`[DevPulse] http://localhost:${PORT}`);
+    console.log(`[Lemo] http://localhost:${PORT}`);
   });
 }
 
 startServer().catch((err) => {
-  console.error('Fatal error launching DevPulse server:', err);
+  console.error('Fatal error launching Lemo server:', err);
   process.exit(1);
 });
