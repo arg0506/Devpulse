@@ -239,6 +239,7 @@ All variables are optional for local development. See [`.env.example`](.env.exam
 | `GEMINI_MODEL` | Overrides the model (default `gemini-3.5-flash`) |
 | `DATABASE_URL` | PostgreSQL connection string. When reachable, users, messages, communities and events are mirrored with Prisma |
 | `DEVPULSE_DATA_FILE` | Path to the JSON data file (default `backend-data.json`). The name is kept from the project’s first name |
+| `FIREBASE_PROJECT_ID` | Firebase project whose sign-in tokens the server accepts (default `lemo-04`) |
 | `STRIPE_SECRET_KEY` | Switches checkout from demo mode to Stripe (see [limitations](#-known-limitations)) |
 
 To use PostgreSQL:

@@ -34,6 +34,7 @@ Error responses are JSON: `{ "error": "message" }`.
 | Method | Path | Auth | Body | Description |
 |---|---|---|---|---|
 | POST | `/register` | — | `{ email, username, password, role?, avatarEmoji?, skills?, bio?, gitHubHandle? }` | Creates an account and sets the session cookie. Returns `{ user }`. |
+| POST | `/firebase` | — | `{ idToken, username?, role?, avatarEmoji?, skills? }` | Starts a session from a Firebase sign-in. Creates the Lemo profile on first use. Returns `{ user }`. |
 | POST | `/login` | — | `{ loginCredential, password }` | Signs in with email or username. Sets the cookie. Returns `{ user }`. |
 | POST | `/logout` | ✓ | — | Ends every session for the account. |
 | GET | `/me` | ✓ | — | The signed-in user's profile. |
