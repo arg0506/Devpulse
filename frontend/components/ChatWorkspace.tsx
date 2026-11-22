@@ -20,6 +20,8 @@ import {
   Pencil,
   CornerUpLeft,
   UserPlus,
+  ChevronDown,
+  Settings,
 } from 'lucide-react';
 import { SocialModal, useSocial } from './SocialModal';
 import VoiceRoom from './VoiceRoom';
@@ -66,7 +68,7 @@ function Sidebar({
           }}
           className={cx(
             'group flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] transition-colors',
-            active ? 'brand-gradient font-semibold text-[#0a0b0d]' : count ? 'font-medium text-ink hover:bg-subtle' : 'text-ink-2 hover:bg-subtle hover:text-ink',
+            active ? 'bg-[#404249] font-semibold text-ink' : count ? 'font-semibold text-ink hover:bg-[#35373c]' : 'text-ink-3 hover:bg-[#35373c] hover:text-ink-2',
           )}
         >
           {icon}
@@ -80,9 +82,11 @@ function Sidebar({
   };
 
   return (
-    <div className="m-2 mr-0 flex h-[calc(100%-1rem)] w-[248px] flex-col overflow-hidden rounded-2xl border border-line bg-surface">
-      <div className="flex h-14 flex-shrink-0 items-center justify-between border-b border-line px-4">
-        <span className="font-display text-[19px] font-extrabold tracking-[-0.03em]">Chat</span>
+    <div className="flex h-full w-60 flex-shrink-0 flex-col overflow-hidden bg-surface">
+      <div className="flex h-12 flex-shrink-0 items-center justify-between border-b border-[#1f2023] px-4 shadow-[0_1px_0_rgba(0,0,0,0.2)]">
+        <span className="flex items-center gap-1 text-[15px] font-semibold">
+          Lemo <ChevronDown size={16} className="text-ink-3" />
+        </span>
         <div className="flex items-center">
           <IconButton label="Friends and moderation" onClick={onSocial}>
             <UserPlus size={15} />
@@ -137,7 +141,58 @@ function Sidebar({
           </ul>
         )}
       </div>
+      <UserPanel />
     </div>
+  );
+}
+
+/** The bar at the bottom of the channel list: your avatar, name and quick controls, as in Discord. */
+function UserPanel() {
+  const { user, setSettingsOpen, presenceOf } = useWorkspace();
+  const status = presenceOf(user.id)?.status || 'online';
+  return (
+    <div className="flex h-[52px] flex-shrink-0 items-center gap-2 bg-[#232428] px-2">
+      <button type="button" onClick={() => setSettingsOpen(true)} className="flex min-w-0 flex-1 items-center gap-2 rounded-md p-1 text-left hover:bg-[#3f4147]">
+        <Avatar emoji={user.avatarEmoji} size={32} status={status} />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[13px] font-semibold text-ink">{user.username}</span>
+          <span className="block truncate text-[11px] text-ink-3">{user.customStatus || status}</span>
+        </span>
+      </button>
+      <IconButton label="Profile and settings" onClick={() => setSettingsOpen(true)}>
+        <Settings size={16} />
+      </IconButton>
+    </div>
+  );
+}
+
+/** Members who are online and offline, listed on the right of the chat, as in Discord. */
+function MemberColumn() {
+  const { presences, user } = useWorkspace();
+  const people = presences.filter((p) => !['system-bot', 'gemini-bot'].includes(p.userId));
+  const online = people.filter((p) => p.status !== 'offline');
+  const offline = people.filter((p) => p.status === 'offline');
+  const group = (title: string, list: typeof people) =>
+    list.length === 0 ? null : (
+      <div className="mb-4">
+        <p className="mb-1 px-2 text-[11px] font-semibold uppercase tracking-[0.02em] text-ink-3">
+          {title} — {list.length}
+        </p>
+        <ul>
+          {list.map((p) => (
+            <li key={p.userId} className="flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-[#35373c]">
+              <Avatar emoji={p.avatarEmoji} size={32} status={p.status} />
+              <span className={cx('min-w-0 flex-1 truncate text-[14px]', p.userId === user.id ? 'text-ink' : 'text-ink-2')}>{p.username}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  return (
+    <aside className="hidden w-60 flex-shrink-0 flex-col overflow-y-auto bg-surface px-2 pt-4 xl:flex">
+      {group('Online', online)}
+      {group('Offline', offline)}
+    </aside>
   );
 }
 
@@ -256,10 +311,10 @@ function MessageRow({
         mentionsMe && 'bg-[#ffd23f]/10 hover:bg-[#ffd23f]/15',
       )}
     >
-      <div className="w-8 flex-shrink-0">
+      <div className="w-10 flex-shrink-0">
         {!compact ? (
           <button type="button" onClick={() => showProfile(msg.userId)} aria-label={`View @${msg.username}`}>
-            <Avatar emoji={msg.avatarEmoji} size={32} />
+            <Avatar emoji={msg.avatarEmoji} size={40} />
           </button>
         ) : (
           <span className="block pt-1 text-right font-mono text-[10px] text-ink-3 opacity-0 group-hover:opacity-100">{timeShort(msg.timestamp)}</span>
@@ -521,7 +576,7 @@ function Composer({
   };
 
   return (
-    <div className="rounded-xl border border-line bg-surface transition-colors focus-within:border-line-strong">
+    <div className="rounded-lg bg-subtle transition-colors">
       {replyTo && (
         <div className="flex items-center justify-between gap-2 border-b border-line px-3.5 py-2 text-[12px] text-ink-3">
           <span className="flex min-w-0 items-center gap-1.5">
@@ -1036,7 +1091,7 @@ export default function ChatWorkspace() {
       {channel?.kind === 'voice' ? (
         <VoiceRoom channel={channel} />
       ) : (
-      <section className="flex min-w-0 flex-1 flex-col bg-surface">
+      <section className="flex min-w-0 flex-1 flex-col bg-canvas">
         <ViewHeader
           leading={
             <>
@@ -1196,6 +1251,8 @@ export default function ChatWorkspace() {
         </div>
       </section>
       )}
+
+      {channel?.kind !== 'voice' && <MemberColumn />}
 
       {panel === 'thread' && threadMsg && (
         <div className="fixed inset-0 z-40 lg:static lg:z-auto">
