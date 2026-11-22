@@ -12,22 +12,37 @@ export function cx(...parts: (string | false | null | undefined)[]) {
  * The Lemo mark: a sticker-style tile, tilted and offset, with an L whose foot
  * turns into a heartbeat and a sparkle in the corner.
  */
+/**
+ * The Lemo mark: a black cat face. Its eyes, nose, mouth and whiskers are cut out of the
+ * shape with a mask, so the page colour shows through and the mark works on light and dark backgrounds.
+ */
 export function LemoMark({ size = 28, className }: { size?: number; className?: string }) {
+  const maskId = `lemo-cat-${React.useId().replace(/:/g, '')}`;
   return (
-    <svg width={size} height={size} viewBox="0 0 48 48" className={className} aria-hidden="true">
-      <g transform="rotate(-8 24 24)">
-        <rect x="7" y="7" width="40" height="40" rx="12" fill="#f2545b" />
-        <rect x="4" y="4" width="40" height="40" rx="12" fill="#111318" />
-        <path
-          d="M15 12 V31 H24 L27 25 L30 35 L33 28 H36"
-          fill="none"
-          stroke="#ffd23f"
-          strokeWidth="4.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <path d="M40 2 L41.6 6.4 L46 8 L41.6 9.6 L40 14 L38.4 9.6 L34 8 L38.4 6.4 Z" fill="#7cc4ff" />
-      </g>
+    <svg width={size} height={size} viewBox="0 0 100 100" className={className} aria-hidden="true">
+      <defs>
+        <mask id={maskId} maskUnits="userSpaceOnUse" x="0" y="0" width="100" height="100">
+          <rect width="100" height="100" fill="#fff" />
+          {/* Eye whites are cut out, and the pupils are left solid again. */}
+          <ellipse cx="36" cy="54" rx="9.5" ry="10.5" fill="#000" />
+          <ellipse cx="64" cy="54" rx="9.5" ry="10.5" fill="#000" />
+          <ellipse cx="38" cy="50" rx="4" ry="6" fill="#fff" />
+          <ellipse cx="66" cy="50" rx="4" ry="6" fill="#fff" />
+          {/* Inner ear */}
+          <path d="M24 34 L30 19 L35 40 Z" fill="#000" />
+          <path d="M76 34 L70 19 L65 40 Z" fill="#000" />
+          {/* Nose and mouth */}
+          <path d="M45 68 Q50 64 55 68 Q53 73 50 73 Q47 73 45 68 Z" fill="#000" />
+          <path d="M40 76 Q45 84 50 78 Q55 84 60 76" fill="none" stroke="#000" strokeWidth="3" strokeLinecap="round" />
+          {/* Whiskers */}
+          <path d="M14 66 L30 68 M14 74 L30 72 M86 66 L70 68 M86 74 L70 72" stroke="#000" strokeWidth="2.6" strokeLinecap="round" />
+        </mask>
+      </defs>
+      <path
+        d="M14 42 L16 14 Q18 10 24 12 L40 24 Q50 22 60 24 L76 12 Q82 10 84 14 L86 42 Q90 62 80 78 Q66 92 50 92 Q34 92 20 78 Q10 62 14 42 Z"
+        fill="currentColor"
+        mask={`url(#${maskId})`}
+      />
     </svg>
   );
 }
