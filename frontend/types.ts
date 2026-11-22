@@ -48,6 +48,8 @@ export interface DevMessage {
   replyTo?: { id: string; username: string; text: string };
   /** A stored file. Images render inline; other files download. */
   attachment?: { name: string; type: string; url: string };
+  /** A GIF from Tenor's media hosts. */
+  gif?: { url: string; title?: string };
   /** Usernames mentioned with @name in the text. */
   mentions?: string[];
   editedAt?: string;

@@ -327,6 +327,15 @@ function MessageRow({
               <Paperclip size={14} /> {msg.attachment.name}
             </a>
           ))}
+        {msg.gif && (
+          <img
+            src={msg.gif.url}
+            alt={msg.gif.title || 'GIF'}
+            loading="lazy"
+            referrerPolicy="no-referrer"
+            className="mt-2 max-h-64 rounded-xl border border-line object-contain"
+          />
+        )}
         {msg.codeSnippet && <CodeBlock code={msg.codeSnippet.code} language={msg.codeSnippet.language} title={msg.codeSnippet.title} />}
         <Reactions msg={msg} onToggle={react} />
         {msg.repliesCount > 0 && (
@@ -419,7 +428,15 @@ function MessageRow({
 // ---------- Composer ----------
 
 type Attachment = { name: string; type: string; dataUrl: string };
-type SendExtra = { attachment?: Attachment; replyToId?: string };
+type SendExtra = { attachment?: Attachment; replyToId?: string; gif?: { url: string; title?: string } };
+type GifHit = { id: string; title: string; preview: string; url: string };
+
+// Whether the server has GIF search configured. Checked once per session.
+let gifStatus: Promise<boolean> | null = null;
+function gifsAvailable(): Promise<boolean> {
+  if (!gifStatus) gifStatus = api<{ enabled: boolean }>('/api/gifs/status').then((r) => r.enabled).catch(() => false);
+  return gifStatus;
+}
 
 const EMOJI_PALETTE = ['😀', '😂', '🥹', '😎', '🤔', '🙌', '👏', '🔥', '🚀', '🎉', '💯', '✅', '❌', '⚡', '🐛', '🛠️', '💡', '👀', '❤️', '🙏', '👍', '👎', '😅', '🤝'];
 const MAX_ATTACHMENT_BYTES = 500_000;
@@ -445,6 +462,25 @@ function Composer({
   const [attachment, setAttachment] = useState<Attachment | null>(null);
   const [attachError, setAttachError] = useState('');
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const [gif, setGif] = useState<{ url: string; title?: string } | null>(null);
+  const [gifOpen, setGifOpen] = useState(false);
+  const [gifEnabled, setGifEnabled] = useState(false);
+  const [gifQuery, setGifQuery] = useState('');
+  const [gifHits, setGifHits] = useState<GifHit[]>([]);
+  const [gifError, setGifError] = useState('');
+
+  useEffect(() => {
+    gifsAvailable().then(setGifEnabled);
+  }, []);
+
+  const searchGifs = async (query: string) => {
+    setGifError('');
+    try {
+      setGifHits(await api<GifHit[]>(`/api/gifs/search?q=${encodeURIComponent(query)}`));
+    } catch (err: any) {
+      setGifError(err.message);
+    }
+  };
   const fileRef = useRef<HTMLInputElement>(null);
   const ref = useRef<HTMLTextAreaElement>(null);
 
@@ -473,10 +509,12 @@ function Composer({
 
   const submit = () => {
     const t = text.trim();
-    if (!t && !attachment) return;
-    onSend(t, { attachment: attachment ?? undefined, replyToId: replyTo?.id });
+    if (!t && !attachment && !gif) return;
+    onSend(t, { attachment: attachment ?? undefined, replyToId: replyTo?.id, gif: gif ?? undefined });
     setText('');
     setAttachment(null);
+    setGif(null);
+    setGifOpen(false);
     setAttachError('');
     onCancelReply?.();
   };
@@ -511,6 +549,48 @@ function Composer({
         </div>
       )}
       {attachError && <p className="px-3.5 pt-2 text-[12px] text-err">{attachError}</p>}
+      {gif && (
+        <div className="flex items-center gap-3 px-3.5 pt-3">
+          <img src={gif.url} alt={gif.title || 'GIF'} className="h-16 rounded-lg border border-line object-cover" />
+          <span className="min-w-0 flex-1 truncate text-[12px] text-ink-3">{gif.title || 'GIF'}</span>
+          <IconButton label="Remove GIF" className="h-6 w-6" onClick={() => setGif(null)}>
+            <X size={13} />
+          </IconButton>
+        </div>
+      )}
+      {gifOpen && (
+        <div className="space-y-2 border-b border-line p-3">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              searchGifs(gifQuery.trim());
+            }}
+            className="flex gap-2"
+          >
+            <input className="field flex-1" placeholder="Search GIFs" value={gifQuery} onChange={(e) => setGifQuery(e.target.value)} aria-label="Search GIFs" />
+            <Button type="submit" disabled={!gifQuery.trim()}>
+              Search
+            </Button>
+          </form>
+          {gifError && <p className="text-[12px] text-err">{gifError}</p>}
+          <div className="grid max-h-56 grid-cols-3 gap-1.5 overflow-y-auto sm:grid-cols-4">
+            {gifHits.map((g) => (
+              <button
+                key={g.id}
+                type="button"
+                onClick={() => {
+                  setGif({ url: g.url, title: g.title });
+                  setGifOpen(false);
+                }}
+                className="overflow-hidden rounded-lg border border-line hover:border-line-strong"
+                aria-label={g.title || 'Choose GIF'}
+              >
+                <img src={g.preview} alt="" loading="lazy" referrerPolicy="no-referrer" className="h-20 w-full object-cover" />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       {emojiOpen && (
         <div className="grid grid-cols-8 gap-0.5 border-b border-line px-2 py-2 sm:grid-cols-12">
           {EMOJI_PALETTE.map((e) => (
@@ -566,6 +646,11 @@ function Composer({
           <IconButton label="Emoji" onClick={() => setEmojiOpen((o) => !o)}>
             <Smile size={15} />
           </IconButton>
+          {gifEnabled && (
+            <IconButton label="Add a GIF" onClick={() => setGifOpen((o) => !o)}>
+              <span className="font-mono text-[10px] font-bold">GIF</span>
+            </IconButton>
+          )}
           <span className="ml-1 hidden text-[11.5px] text-ink-3 sm:inline">
             <span className="font-mono">**bold**</span> · <span className="font-mono">`code`</span> · <span className="font-mono">```</span> blocks ·
             Shift + Enter for a new line
@@ -574,8 +659,8 @@ function Composer({
         <IconButton
           label="Send"
           onClick={submit}
-          disabled={!text.trim() && !attachment}
-          className={cx((text.trim() || attachment) && 'bg-ink text-inverse hover:bg-ink hover:text-inverse')}
+          disabled={!text.trim() && !attachment && !gif}
+          className={cx((text.trim() || attachment || gif) && 'bg-ink text-inverse hover:bg-ink hover:text-inverse')}
         >
           <SendHorizontal size={15} />
         </IconButton>

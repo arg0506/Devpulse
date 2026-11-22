@@ -15,6 +15,7 @@ import { authMiddleware, AuthenticatedRequest } from './backend/middleware/auth'
 import { rateLimit } from './backend/middleware/rateLimit';
 import { uploadsMiddleware } from './backend/uploads';
 import { cachedLinkPreview } from './backend/linkPreview';
+import { gifsEnabled, searchGifs } from './backend/gifs';
 import { buildPresenceList } from './backend/realtime';
 import { isGeminiReady } from './backend/gemini';
 
@@ -47,6 +48,18 @@ async function startServer() {
   app.use('/api/events', eventsRouter);
   app.use('/api/payments', paymentsRouter);
   app.use('/api/agents', agentsRouter);
+
+  app.get('/api/gifs/status', (_req, res) => {
+    res.json({ enabled: gifsEnabled() });
+  });
+  const gifLimiter = rateLimit({ windowMs: 60 * 1000, max: 40 }, 'Too many GIF searches. Wait a moment.');
+  app.get('/api/gifs/search', authMiddleware, gifLimiter, async (req: AuthenticatedRequest, res) => {
+    try {
+      res.json(await searchGifs(String(req.query.q || '')));
+    } catch (err: any) {
+      res.status(503).json({ error: err.message });
+    }
+  });
 
   // Link previews fetch outside pages, so they are limited per address and only for signed-in people.
   const previewLimiter = rateLimit({ windowMs: 60 * 1000, max: 30 }, 'Too many link previews. Slow down a little.');

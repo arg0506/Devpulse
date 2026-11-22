@@ -7,6 +7,7 @@ import { setIO, connectionCounts, broadcastPresence } from './realtime';
 import { DevMessage, DevUser, ThreadReply, WhiteboardElement, CodeSnippet } from '../frontend/types';
 import { hasPermission } from '../frontend/lib/permissions';
 import { saveUpload, deleteUpload } from './uploads';
+import { isAllowedGifUrl } from './gifs';
 import prisma, { isPrismaEnabled } from './prismaClient';
 
 const MAX_MESSAGE_LENGTH = 8000;
@@ -310,14 +311,22 @@ export function initSockets(server: HTTPServer) {
     // ---------- Messages ----------
     socket.on(
       'message:send',
-      (input: { channelId: string; text: string; codeSnippet?: CodeSnippet; replyToId?: string; attachment?: unknown }) => {
+      (input: {
+        channelId: string;
+        text: string;
+        codeSnippet?: CodeSnippet;
+        replyToId?: string;
+        attachment?: unknown;
+        gif?: { url?: unknown; title?: unknown };
+      }) => {
       const channelId = String(input?.channelId || '');
       const text = String(input?.text || '')
         .trim()
         .slice(0, MAX_MESSAGE_LENGTH);
       const snippet = sanitiseSnippet(input?.codeSnippet);
       const attachment = sanitiseAttachment(input?.attachment);
-      if (!channelId || (!text && !snippet && !attachment) || !db.canAccessChannel(channelId, userId)) return;
+      const gifUrl = typeof input?.gif?.url === 'string' && isAllowedGifUrl(input.gif.url) ? input.gif.url : undefined;
+      if (!channelId || (!text && !snippet && !attachment && !gifUrl) || !db.canAccessChannel(channelId, userId)) return;
       const channelRecord = db.getChannel(channelId);
       if (!channelRecord) return;
       const timedOut = db.timeoutUntil(userId);
@@ -340,6 +349,7 @@ export function initSockets(server: HTTPServer) {
       const msg = messageFrom(author, channelId, finalText, snippet);
       const stored = attachment ? saveUpload(attachment.dataUrl, attachment.name, attachment.type) : undefined;
       if (stored) msg.attachment = stored;
+      if (gifUrl) msg.gif = { url: gifUrl, title: String(input.gif?.title || '').slice(0, 120) || undefined };
       const replied = input?.replyToId ? db.getMessage(String(input.replyToId)) : undefined;
       if (replied && replied.channelId === channelId) {
         msg.replyTo = { id: replied.id, username: replied.username, text: replied.text.slice(0, 120) };
