@@ -12,6 +12,7 @@ import paymentsRouter from './backend/routes/payments';
 import agentsRouter from './backend/routes/agents';
 import { checkPrismaConnection, isPrismaEnabled } from './backend/prismaClient';
 import { authMiddleware, AuthenticatedRequest } from './backend/middleware/auth';
+import { rateLimit } from './backend/middleware/rateLimit';
 import { buildPresenceList } from './backend/realtime';
 import { isGeminiReady } from './backend/gemini';
 
@@ -25,6 +26,10 @@ async function startServer() {
   if (process.env.FRONTEND_URL) app.use(cors({ origin: process.env.FRONTEND_URL, credentials: true }));
   app.use(express.json({ limit: '1mb' }));
 
+  // Password endpoints allow 10 attempts per IP every 15 minutes.
+  const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10 }, 'Too many attempts. Wait a few minutes and try again.');
+  app.use('/api/auth/login', authLimiter);
+  app.use('/api/auth/register', authLimiter);
   app.use('/api/auth', authRouter);
   app.use('/api/communities', communitiesRouter);
   app.use('/api/events', eventsRouter);
