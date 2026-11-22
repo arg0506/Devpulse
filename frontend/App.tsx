@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { DevUser } from './types';
 import { api, ApiError, hasSession, setSessionMarker } from './lib/api';
 import { socket } from './socket';
+import { signOutOfFirebase } from './lib/firebase';
 import { WorkspaceProvider } from './lib/workspace';
 import LandingPage from './components/LandingPage';
 import AuthScreen from './components/AuthScreen';
@@ -33,6 +34,7 @@ export default function App() {
   const signOut = useCallback(() => {
     // Tell the server to end this session too, so a copied token stops working. Sign-out succeeds even if the call fails.
     api('/api/auth/logout', { method: 'POST' }).catch(() => undefined);
+    signOutOfFirebase();
     setSessionMarker(false);
     socket.disconnect();
     setUser(null);

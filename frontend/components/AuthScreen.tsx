@@ -1,6 +1,13 @@
 import React, { useState } from 'react';
 import { ArrowLeft, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { api, setSessionMarker } from '../lib/api';
+import {
+  describeAuthError,
+  isMissingFirebaseAccount,
+  signInWithEmail,
+  signInWithGoogle,
+  signUpWithEmail,
+} from '../lib/firebase';
 import { DevUser } from '../types';
 import { LemoMark, cx, AVATAR_CHOICES, SKILL_CHOICES } from './ui';
 
@@ -74,11 +81,30 @@ export default function AuthScreen({ initialMode, onAuthenticated, onBack }: Aut
     setLoading(true);
     setError(null);
     try {
-      const res = await api<{ token: string; user: DevUser }>('/api/auth/login', { body: { loginCredential: credential, password } });
+      // An email goes through Firebase first. Accounts created before Firebase use a password on Lemo itself.
+      if (credential.includes('@')) {
+        try {
+          return onAuthenticated(await signInWithEmail(credential.trim(), password));
+        } catch (err) {
+          if (!isMissingFirebaseAccount(err)) throw err;
+        }
+      }
+      const res = await api<{ user: DevUser }>('/api/auth/login', { body: { loginCredential: credential, password } });
       setSessionMarker(true);
       onAuthenticated(res.user);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError(describeAuthError(err));
+      setLoading(false);
+    }
+  };
+
+  const google = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      onAuthenticated(await signInWithGoogle());
+    } catch (err) {
+      setError(describeAuthError(err));
       setLoading(false);
     }
   };
@@ -98,15 +124,13 @@ export default function AuthScreen({ initialMode, onAuthenticated, onBack }: Aut
     setLoading(true);
     setError(null);
     try {
-      const res = await api<{ token: string; user: DevUser }>('/api/auth/register', {
-        body: { email, username, password, role, avatarEmoji: avatar, skills },
-      });
-      setSessionMarker(true);
-      onAuthenticated(res.user);
-    } catch (err: any) {
-      setError(err.message);
-      // Email/username conflicts are fixed on the first step.
-      if (/email|username/i.test(err.message)) setStep(1);
+      const user = await signUpWithEmail(email.trim(), password, { username, role, avatarEmoji: avatar, skills });
+      onAuthenticated(user);
+    } catch (err) {
+      const message = describeAuthError(err);
+      setError(message);
+      // Username conflicts are fixed on the first step.
+      if (/username/i.test(message)) setStep(1);
       setLoading(false);
     }
   };
@@ -142,6 +166,24 @@ export default function AuthScreen({ initialMode, onAuthenticated, onBack }: Aut
             <div role="alert" className="mt-5 flex items-start gap-2 rounded-xl border border-[#d93644]/30 bg-[#d93644]/10 px-3 py-2.5 text-[13px] text-[#b42331]">
               <AlertCircle size={15} className="mt-px flex-shrink-0" />
               <span>{error}</span>
+            </div>
+          )}
+
+          {step === 1 && (
+            <div className="mt-8">
+              <button
+                type="button"
+                onClick={google}
+                disabled={loading}
+                className="w-full rounded-xl border border-[#111318]/15 bg-[#f3f3f5] py-3 text-[14px] font-semibold text-[#111318] transition-colors hover:bg-[#e9e9ec] disabled:opacity-50"
+              >
+                Continue with Google
+              </button>
+              <div className="my-6 flex items-center gap-3 text-[12px] text-[#6b7280]">
+                <span className="h-px flex-1 bg-[#111318]/10" />
+                or
+                <span className="h-px flex-1 bg-[#111318]/10" />
+              </div>
             </div>
           )}
 
