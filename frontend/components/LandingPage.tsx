@@ -174,80 +174,84 @@ export default function LandingPage({ onGetStarted, onSignIn }: LandingPageProps
   return (
     <div className="min-h-full bg-white text-[#0a0b0d]">
       {/* Hero: a monitor on a blue stage, with the site inside the screen */}
-      {/* Hero: matches the monitor design: white top with navigation, centred blue card with side cards */}
-      <header className="relative overflow-hidden bg-white px-4 pt-4 pb-20 text-[#0a0b0d] md:pt-6">
-        <nav className="mx-auto flex h-14 max-w-6xl items-center justify-between px-2">
+      {/* Hero: white navigation bar, then a full-width blue stage with centred headline and side cards */}
+      <header className="bg-white text-[#0a0b0d]">
+        <nav className="mx-auto flex h-20 max-w-7xl items-center justify-between px-6 md:px-10">
           <Wordmark />
-          <div className="hidden items-center gap-8 text-[13px] text-[#0a0b0d]/75 md:flex">
+          <div className="hidden items-center gap-9 text-[14px] text-[#0a0b0d]/80 md:flex">
             {NAV_LINKS.map((link) => (
-              <a key={link.id} href={`#${link.id}`} className="hover:text-[#0a0b0d]">
+              <a key={link.id} href={`#${link.id}`} className="inline-flex items-center gap-1 hover:text-[#0a0b0d]">
                 {link.label}
               </a>
             ))}
           </div>
-          <div className="flex items-center gap-2">
-            <button type="button" onClick={onSignIn} className="rounded-xl border border-[#0a0b0d]/15 px-4 py-2 text-[13px] font-semibold">
+          <div className="flex items-center gap-5">
+            <button type="button" onClick={onSignIn} className="hidden text-[14px] font-medium sm:block">
               Log in
             </button>
-            <button type="button" onClick={() => onGetStarted()} className="rounded-xl bg-[#0a0b0d] px-4 py-2 text-[13px] font-semibold text-white">
-              Get started
+            <button type="button" onClick={() => onGetStarted()} className="rounded-xl bg-[#0a0b0d] px-5 py-3 text-[14px] font-semibold text-white">
+              Open an Account
             </button>
           </div>
         </nav>
 
-        <div className="relative mx-auto mt-4 max-w-6xl overflow-hidden rounded-[28px] px-6 pt-10 pb-12 text-center text-white md:px-10 md:pb-16" style={{ backgroundColor: BLUE }}>
-          {/* Starfield texture, as in the design */}
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-0 opacity-50"
-            style={{
-              backgroundImage: 'radial-gradient(rgba(255,255,255,0.45) 1px, transparent 1px), radial-gradient(rgba(255,255,255,0.25) 1px, transparent 1px)',
-              backgroundSize: '70px 70px, 31px 31px',
-              backgroundPosition: '0 0, 13px 19px',
-            }}
-          />
-          <div aria-hidden="true" className="pointer-events-none absolute -left-16 top-24 h-56 w-56 rounded-full bg-[#7fa3ff]/50 blur-3xl" />
-          <div aria-hidden="true" className="pointer-events-none absolute -right-16 bottom-10 h-56 w-56 rounded-full bg-[#9bb8ff]/40 blur-3xl" />
+        <div
+          className="relative isolate min-h-[760px] overflow-hidden rounded-t-[40px] px-4 pt-10 pb-16 text-center text-white md:min-h-[880px] md:px-10"
+          style={{ background: 'radial-gradient(ellipse at 50% 35%, #2f6bff 0%, #1d54f0 45%, #0f3fc9 100%)' }}
+        >
+          {/* Pixel character, top left */}
+          <PixelInvader className="absolute left-[4%] top-[6%] hidden h-36 w-36 drop-shadow-[0_18px_30px_rgba(10,30,120,0.45)] md:block" />
 
-          <a href="#features" className="relative inline-flex items-center gap-2 rounded-md bg-[#0a0b0d] px-3 py-1.5 text-[12px] font-medium text-white">
-            New: voice channels are live <ArrowRight size={12} />
+          {/* Frosted shapes around the stage */}
+          <div aria-hidden="true" className="pointer-events-none absolute -right-6 top-[6%] hidden h-56 w-80 -rotate-12 rounded-[60px] bg-gradient-to-br from-white/70 via-[#bcd5ff]/50 to-[#5b8dff]/20 blur-[2px] md:block" />
+          <div aria-hidden="true" className="pointer-events-none absolute -bottom-10 -left-10 hidden h-80 w-[26rem] rotate-6 rounded-[48%_52%_46%_54%/58%_44%_56%_42%] bg-gradient-to-br from-white/60 via-[#a9ccff]/50 to-[#3d72ff]/30 blur-[2px] md:block" />
+          <div aria-hidden="true" className="pointer-events-none absolute -bottom-6 right-[6%] hidden h-64 w-56 -rotate-6 rounded-[44%_56%_40%_60%/50%_50%_50%_50%] bg-gradient-to-br from-white/60 to-[#7fa8ff]/30 blur-[2px] md:block" />
+
+          {/* Announcement */}
+          <a href="#features" className="relative inline-flex items-center gap-2 rounded-full bg-[#0a1230] px-5 py-2.5 text-[14px] font-medium text-white">
+            Lemo has voice channels now <ArrowRight size={14} />
           </a>
 
-          <div className="relative mt-10 grid items-center gap-10 lg:grid-cols-[1fr_auto_1fr]">
-            {/* Left card: illustration */}
-            <div className="mx-auto hidden w-56 -rotate-3 rounded-3xl bg-white p-3 shadow-2xl lg:block">
-              <img src={HERO_FIGURE} alt="" className="h-72 w-full rounded-2xl object-cover" draggable={false} />
-            </div>
+          {/* Headline with a sticker word */}
+          <h1 className="relative mx-auto mt-10 font-display text-[60px] leading-[0.92] font-extrabold tracking-[-0.045em] text-white sm:text-[84px] md:text-[104px] lg:text-[120px]">
+            Build together,
+            <br />
+            for{' '}
+            <span
+              className="relative inline-block -rotate-2 px-3 text-[#0a0b0d]"
+              style={{
+                textShadow:
+                  '0 0 0 #fff, 3px 3px 0 #fff, -3px -3px 0 #fff, 3px -3px 0 #fff, -3px 3px 0 #fff, 0 9px 0 #fff, 0 14px 22px rgba(0,8,50,0.35)',
+              }}
+            >
+              developers
+            </span>
+          </h1>
 
-            {/* Centre: headline and actions */}
-            <div>
-              <PixelInvader className="mx-auto mb-2 h-10 w-10 md:absolute md:left-8 md:top-28 md:mb-0 md:h-14 md:w-14" />
-              <h1 className="font-display text-[46px] leading-[0.95] font-extrabold tracking-[-0.04em] sm:text-[64px] lg:text-[76px]">
-                Build together,
-                <br />
-                <span className="inline-block -rotate-2 rounded-2xl bg-white px-4 py-1 text-[#0a0b0d] shadow-[0_8px_0_0_#0a0b0d]">for developers.</span>
-              </h1>
-              <p className="mx-auto mt-7 max-w-md text-[14.5px] leading-relaxed text-white/85">
-                Channels, voice, a shared whiteboard and an agent builder in one live workspace. Every change reaches everyone.
-              </p>
-              <div className="mx-auto mt-9 inline-flex items-center gap-1 rounded-2xl bg-white p-1.5 shadow-lg">
-                <button type="button" onClick={() => onGetStarted()} className="rounded-xl bg-[#0a0b0d] px-6 py-3 text-[14px] font-semibold text-white">
-                  Open an account
-                </button>
-                <button type="button" onClick={() => scrollToSection('pricing')} className="rounded-xl px-6 py-3 text-[14px] font-semibold text-[#0a0b0d]">
-                  See pricing
-                </button>
-              </div>
-            </div>
+          <p className="relative mx-auto mt-10 max-w-xl text-[17px] leading-relaxed text-white/90">
+            Channels, voice, a shared whiteboard and an agent builder in one live workspace. Every change reaches everyone, the moment it happens.
+          </p>
 
-            {/* Right card: chat preview */}
-            <div className="mx-auto hidden w-64 rotate-3 rounded-3xl bg-white p-5 text-left text-[#0a0b0d] shadow-2xl lg:block">
-              <p className="font-mono text-[11px] text-[#0a0b0d]/50">#react-vite</p>
-              <p className="mt-2 text-[13px] font-semibold">dan_abramov</p>
-              <p className="text-[12.5px] text-[#0a0b0d]/70">Throttle socket updates to 60ms.</p>
-              <p className="mt-3 text-[13px] font-semibold">gemini</p>
-              <p className="text-[12.5px] text-[#0a0b0d]/70">Debounce typing events separately.</p>
-            </div>
+          {/* Actions */}
+          <div className="relative mx-auto mt-12 inline-flex items-center gap-1 rounded-2xl bg-white p-2 shadow-[0_20px_50px_-15px_rgba(0,15,80,0.5)]">
+            <button type="button" onClick={() => onGetStarted()} className="inline-flex items-center gap-2 rounded-xl bg-[#0a0b0d] px-7 py-4 text-[15px] font-semibold text-white">
+              Open an Account <ArrowRight size={16} />
+            </button>
+            <button type="button" onClick={() => scrollToSection('pricing')} className="rounded-xl px-7 py-4 text-[15px] font-semibold text-[#0a0b0d]">
+              See pricing
+            </button>
+          </div>
+
+          {/* Side cards */}
+          <div className="absolute left-[7%] top-[34%] hidden w-56 -rotate-[8deg] overflow-hidden rounded-[28px] bg-white/25 p-2 shadow-[0_30px_60px_-20px_rgba(0,15,80,0.55)] backdrop-blur-sm lg:block">
+            <img src={HERO_FIGURE} alt="" className="h-72 w-full rounded-[22px] object-cover" draggable={false} />
+          </div>
+          <div className="absolute right-[7%] top-[40%] hidden w-60 rotate-[7deg] rounded-[28px] bg-white p-5 text-left text-[#0a0b0d] shadow-[0_30px_60px_-20px_rgba(0,15,80,0.55)] lg:block">
+            <p className="font-mono text-[11px] text-[#0a0b0d]/50">#react-vite</p>
+            <p className="mt-3 text-[14px] font-semibold">dan_abramov</p>
+            <p className="text-[13px] text-[#0a0b0d]/70">Throttle socket updates to 60ms.</p>
+            <p className="mt-4 text-[14px] font-semibold">gemini</p>
+            <p className="text-[13px] text-[#0a0b0d]/70">Debounce typing events separately.</p>
           </div>
         </div>
       </header>
