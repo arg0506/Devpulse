@@ -170,7 +170,10 @@ function sanitiseSnippet(raw: any): CodeSnippet | undefined {
 const c = (tone: 'accent' | 'ok' | 'warn' | 'err' | 'muted', text: string | number) => `[[${tone}]${text}]`;
 
 export function initSockets(server: HTTPServer) {
-  const io = new SocketIOServer(server, { cors: { origin: process.env.FRONTEND_URL || '*' } });
+  // Without FRONTEND_URL, only the app's own origin can connect. The bundled client is served from the same origin.
+  const io = new SocketIOServer(server, {
+    cors: process.env.FRONTEND_URL ? { origin: process.env.FRONTEND_URL, credentials: true } : undefined,
+  });
   setIO(io);
 
   // Every socket must present a valid session token.
