@@ -220,6 +220,8 @@ npm run dev
 
 Open **http://localhost:3000**, create an account, and say hello in `#general`.
 
+Run the checks with `npm run lint`, `npm test` and `npm run build`. A GitHub Actions workflow runs them on every push and pull request. The API is documented in [`docs/API.md`](docs/API.md), and [`CONTRIBUTING.md`](CONTRIBUTING.md) covers how to contribute.
+
 > **Tip:** the first account created is the workspace admin. To choose admins yourself, set `LEMO_ADMINS` (see below).
 
 ---
@@ -256,6 +258,7 @@ npm run db:push
 | `npm run build` | Builds the client to `dist/` and bundles the server to `dist/server.cjs` |
 | `npm start` | Runs the production build from the project root (needs `JWT_SECRET`) |
 | `npm run lint` | Type-checks the whole project |
+| `npm test` | Runs the test suite in `tests/` |
 | `npm run db:generate` | Generates the Prisma client |
 | `npm run db:push` | Pushes the Prisma schema to PostgreSQL |
 
@@ -322,7 +325,9 @@ Type is **Bricolage Grotesque** for headlines, **IBM Plex Sans** for reading and
 
 ## 🔐 Security
 
-- Every REST call and socket connection needs a valid token. Banned accounts are refused at connection time.
+- Sessions live in an **HttpOnly, SameSite=Strict cookie**, so page scripts cannot read them. Signing out ends the session on every device and disconnects its sockets.
+- Sign-in and sign-up are rate limited per IP address. Banned accounts are refused at connection time.
+- Responses carry `nosniff`, a frame-denial header and a referrer policy. The socket server only accepts the configured `FRONTEND_URL`, or same-origin connections when it is unset.
 - The server builds every message from the authenticated user, so clients can’t impersonate anyone.
 - Passwords are hashed with **bcrypt**. Credentials are stored apart from public profiles, and public user lists never include them.
 - Permissions are checked on the server for every role, invite, membership, channel and moderation action. The client only hides buttons.
@@ -340,7 +345,8 @@ To report a vulnerability, please open a private security advisory on GitHub rat
 - **Voice and video are not built yet.** They need a WebRTC setup, and calls across different networks also need a TURN server.
 - **No GIF picker** until a Tenor or Giphy API key is configured.
 - **No link previews.** Fetching arbitrary pages from the server needs a domain policy first.
-- **Attachments are small** (500 KB) and are stored inside the JSON data file. Object storage would fix this.
+- **Attachments are small** (500 KB) and are kept in a local `uploads/` folder. Object storage (such as S3) would be needed for larger files or several servers.
+- **The JSON file is still the source of truth.** PostgreSQL is an optional mirror, so a single-server, single-file setup is the supported way to run Lemo today.
 - **Live Stripe payments.** Without `STRIPE_SECRET_KEY`, checkout runs in demo mode. With a key, the server creates and verifies real PaymentIntents, but the card form still needs Stripe’s Payment Element before live checkout can be enabled.
 - **Agent triggers run from the studio.** Scheduled and incoming-webhook triggers need a server-side runner.
 - **One shared whiteboard** for the whole workspace.
