@@ -29,7 +29,7 @@ import { SocialModal, useSocial } from './SocialModal';
 import VoiceRoom from './VoiceRoom';
 import { CreateGroupModal, GroupInfoModal } from './GroupModals';
 import { api } from '../lib/api';
-import { hasPermission } from '../lib/permissions';
+import { hasPermission, topRole } from '../lib/permissions';
 import { DevCommunity } from '../types';
 import { socket } from '../socket';
 import { useWorkspace, channelLabel } from '../lib/workspace';
@@ -218,15 +218,15 @@ function UserPanel() {
 }
 
 /** Members who are online and offline, listed on the right of the chat, as in Discord. */
-function MemberColumn() {
+function MemberColumn({ community }: { community?: DevCommunity }) {
   const { presences, user, showProfile } = useWorkspace();
   const people = presences.filter((p) => !['system-bot', 'gemini-bot'].includes(p.userId));
   const online = people.filter((p) => p.status !== 'offline');
   const offline = people.filter((p) => p.status === 'offline');
-  const group = (title: string, list: typeof people) =>
+  const group = (title: string, list: typeof people, color?: string) =>
     list.length === 0 ? null : (
       <div className="mb-4">
-        <p className="mb-2 px-2 text-[12px] font-bold uppercase tracking-[0.02em] text-ink-3">
+        <p className="mb-2 px-2 text-[12px] font-bold uppercase tracking-[0.02em] text-ink-3" style={color ? { color } : undefined}>
           {title} <span className="ml-1 font-semibold">{list.length}</span>
         </p>
         <ul>
@@ -243,7 +243,9 @@ function MemberColumn() {
     );
   return (
     <aside className="hidden w-64 flex-shrink-0 flex-col overflow-y-auto bg-surface px-3 pt-5 xl:flex">
-      {group('Online', online)}
+      {community
+        ? (community.roles ?? []).map((r) => group(r.name, online.filter((p) => topRole(community, p.userId)?.id === r.id), r.color))
+        : group('Online', online)}
       {group('Offline', offline)}
     </aside>
   );
@@ -899,7 +901,6 @@ export default function ChatWorkspace() {
   const [panel, setPanel] = useState<'none' | 'members' | 'thread'>('none');
   const [threadMsg, setThreadMsg] = useState<DevMessage | null>(null);
   const [filter, setFilter] = useState('');
-  const [showSearch, setShowSearch] = useState(false);
   const [pinnedOnly, setPinnedOnly] = useState(false);
   const [mobileSidebar, setMobileSidebar] = useState(false);
 
@@ -1170,16 +1171,16 @@ export default function ChatWorkspace() {
                   Event details
                 </Button>
               )}
-              <IconButton
-                label="Search this channel"
-                active={showSearch}
-                onClick={() => {
-                  setShowSearch((s) => !s);
-                  setFilter('');
-                }}
-              >
-                <Search size={16} />
-              </IconButton>
+              <div className="relative hidden lg:block">
+                <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-3" />
+                <input
+                  className="field h-8 w-52 pl-8 text-[13px]"
+                  placeholder={`Search ${isDM ? label : '#' + label}`}
+                  value={filter}
+                  onChange={(e) => setFilter(e.target.value)}
+                  aria-label="Search this channel"
+                />
+              </div>
               <IconButton
                 label={pinnedOnly ? 'Show all messages' : 'Show pinned messages'}
                 active={pinnedOnly}
@@ -1193,17 +1194,6 @@ export default function ChatWorkspace() {
             </>
           }
         />
-        {showSearch && (
-          <div className="border-b border-line px-4 py-2">
-            <input
-              autoFocus
-              className="field h-8 text-[13px]"
-              placeholder={`Search in ${isDM ? label : '#' + label}`}
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-            />
-          </div>
-        )}
 
         <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto pb-3">
           {loadedFor === activeChannelId && messages.length === 0 && (
@@ -1312,7 +1302,7 @@ export default function ChatWorkspace() {
       </section>
       )}
 
-      {channel?.kind !== 'voice' && <MemberColumn />}
+      {channel?.kind !== 'voice' && <MemberColumn community={community} />}
 
       {panel === 'thread' && threadMsg && (
         <div className="fixed inset-0 z-40 lg:static lg:z-auto">
