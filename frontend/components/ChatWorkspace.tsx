@@ -667,6 +667,16 @@ export default function ChatWorkspace() {
   const [replyTo, setReplyTo] = useState<DevMessage | null>(null);
   const [mention, setMention] = useState<{ channelId: string; from: string; text: string } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+
+  const loadOlder = () => {
+    const oldest = messages[0];
+    if (!oldest || loadingOlder) return;
+    setLoadingOlder(true);
+    stickToBottom.current = false;
+    socket.emit('messages:older', { channelId: activeChannelId, beforeId: oldest.id });
+  };
   const [socialOpen, setSocialOpen] = useState(false);
   const social = useSocial();
 
@@ -705,6 +715,8 @@ export default function ChatWorkspace() {
     const join = () => socket.emit('user:join-channel', { channelId: activeChannelId });
     setMessages([]);
     setLoadedFor(null);
+    setHasMore(false);
+    setLoadingOlder(false);
     setTyping({});
     setThreadMsg(null);
     setReplyTo(null);
@@ -719,10 +731,20 @@ export default function ChatWorkspace() {
   }, [activeChannelId]);
 
   useEffect(() => {
-    const onInit = ({ channelId, messages: list }: { channelId: string; messages: DevMessage[] }) => {
+    const onInit = ({ channelId, messages: list, hasMore: more }: { channelId: string; messages: DevMessage[]; hasMore: boolean }) => {
       if (channelId !== activeChannelId) return;
       setMessages(list);
+      setHasMore(more);
       setLoadedFor(channelId);
+    };
+    const onOlder = ({ channelId, messages: older, hasMore: more }: { channelId: string; messages: DevMessage[]; hasMore: boolean }) => {
+      if (channelId !== activeChannelId) return;
+      setMessages((prev) => {
+        const known = new Set(prev.map((m) => m.id));
+        return [...older.filter((m) => !known.has(m.id)), ...prev];
+      });
+      setHasMore(more);
+      setLoadingOlder(false);
     };
     const onNew = (m: DevMessage) =>
       m.channelId === activeChannelId && setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev, m]));
@@ -745,6 +767,7 @@ export default function ChatWorkspace() {
       });
 
     socket.on('init:messages', onInit);
+    socket.on('messages:older', onOlder);
     socket.on('message:new', onNew);
     socket.on('message:update', onUpdate);
     socket.on('message:deleted', onDeleted);
@@ -752,6 +775,7 @@ export default function ChatWorkspace() {
     socket.on('typing:stop', onTypingStop);
     return () => {
       socket.off('init:messages', onInit);
+      socket.off('messages:older', onOlder);
       socket.off('message:new', onNew);
       socket.off('message:update', onUpdate);
       socket.off('message:deleted', onDeleted);
@@ -940,6 +964,13 @@ export default function ChatWorkspace() {
           )}
           {loadedFor !== activeChannelId && (
             <p className="px-5 py-8 text-[13px] text-ink-3">{connected ? 'Loading messages…' : 'Waiting for connection…'}</p>
+          )}
+          {hasMore && loadedFor === activeChannelId && !filter && !pinnedOnly && (
+            <div className="flex justify-center py-3">
+              <Button size="sm" loading={loadingOlder} onClick={loadOlder}>
+                Load older messages
+              </Button>
+            </div>
           )}
           {(filter || pinnedOnly) && loadedFor === activeChannelId && visible.length === 0 && messages.length > 0 && (
             <EmptyState

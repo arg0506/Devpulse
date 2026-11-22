@@ -210,7 +210,7 @@ export function initSockets(server: HTTPServer) {
         text = 'I am offline right now. Add `GEMINI_API_KEY` to the server `.env` file and restart to talk to me.';
       } else {
         const history = db
-          .getMessages(channelId, 12)
+          .getRecentMessages(channelId, 12).messages
           .filter((m) => m.id !== trigger.id)
           .map((m) => `@${m.username}: ${m.text}${m.codeSnippet ? `\n${m.codeSnippet.code}` : ''}`)
           .join('\n');
@@ -256,7 +256,13 @@ export function initSockets(server: HTTPServer) {
       }
       currentChannel = channelId;
       socket.join(`channel:${channelId}`);
-      socket.emit('init:messages', { channelId, messages: db.getMessages(channelId) });
+      socket.emit('init:messages', { channelId, ...db.getRecentMessages(channelId) });
+    });
+
+    /** Older history, one page at a time, for "Load older messages". */
+    socket.on('messages:older', ({ channelId, beforeId }: { channelId: string; beforeId: string }) => {
+      if (!channelId || !beforeId || !db.canAccessChannel(channelId, userId)) return;
+      socket.emit('messages:older', { channelId, ...db.getOlderMessages(channelId, String(beforeId)) });
     });
 
     socket.on('channel:create', (input: { name: string; description?: string; category?: 'Channels' | 'Guilds' }, ack?: (c: any) => void) => {
@@ -608,7 +614,7 @@ export function initSockets(server: HTTPServer) {
           const list = db.getChannelsForUser(userId).filter((ch) => ch.category === 'Channels' || ch.category === 'Guilds');
           respond(
             list
-              .map((ch) => `  ${c('accent', '#' + ch.name)}  ${c('muted', `${db.getMessages(ch.id, 100000).length} msgs`)}  ${ch.description}`)
+              .map((ch) => `  ${c('accent', '#' + ch.name)}  ${c('muted', `${db.getRecentMessages(ch.id, 100000).messages.length} msgs`)}  ${ch.description}`)
               .join('\n'),
           );
           break;

@@ -592,9 +592,19 @@ class Database {
   }
 
   // ---------- Messages ----------
-  getMessages(channelId: string, limit = 200): DevMessage[] {
+  /** The newest `limit` messages in a channel, and whether older ones exist. */
+  getRecentMessages(channelId: string, limit = 50): { messages: DevMessage[]; hasMore: boolean } {
     const all = this.data.messages.filter((m) => m.channelId === channelId);
-    return all.slice(-limit);
+    return { messages: all.slice(-limit), hasMore: all.length > limit };
+  }
+
+  /** The `limit` messages just before `beforeId`, oldest first, and whether still older ones exist. */
+  getOlderMessages(channelId: string, beforeId: string, limit = 50): { messages: DevMessage[]; hasMore: boolean } {
+    const all = this.data.messages.filter((m) => m.channelId === channelId);
+    const index = all.findIndex((m) => m.id === beforeId);
+    if (index <= 0) return { messages: [], hasMore: false };
+    const start = Math.max(0, index - limit);
+    return { messages: all.slice(start, index), hasMore: start > 0 };
   }
 
   getMessage(id: string): DevMessage | undefined {

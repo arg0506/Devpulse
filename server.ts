@@ -62,7 +62,7 @@ async function startServer() {
     if (!db.canAccessChannel(req.params.channelId, req.user!.userId)) {
       return res.status(403).json({ error: 'You are not part of this conversation.' });
     }
-    res.json(db.getMessages(req.params.channelId));
+    res.json(db.getRecentMessages(req.params.channelId));
   });
 
   // Public profiles only: credentials live in a separate store and never leave the server.
