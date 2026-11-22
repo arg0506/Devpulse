@@ -258,6 +258,23 @@ router.delete('/:id/members/:userId', authMiddleware, (req: AuthenticatedRequest
   return res.json({ ok: true });
 });
 
+/** Limits a community channel to some roles, or opens it to everyone with an empty list. */
+router.patch('/:id/channels/:channelId', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+  const community = requirePermission(req, res, 'manage_channels');
+  if (!community) return;
+  if (!community.channels.includes(String(req.params.channelId))) {
+    return res.status(404).json({ error: 'That channel is not in this community.' });
+  }
+  const valid = new Set((community.roles || []).map((r) => r.id).filter((id) => id !== 'owner'));
+  const requested: string[] = Array.isArray(req.body?.roleIds) ? (req.body.roleIds as unknown[]).map((id) => String(id)) : [];
+  const roleIds = [...new Set(requested)].filter((id) => valid.has(id) && id !== 'member');
+  const channel = db.setChannelRoles(String(req.params.channelId), roleIds);
+  if (!channel) return res.status(404).json({ error: 'That channel no longer exists.' });
+  getIO()?.emit('channel:new', channel);
+  announce(db.findCommunity(community.id)!);
+  return res.json(channel);
+});
+
 router.post('/:id/channels', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
   const community = requirePermission(req, res, 'manage_channels');
   if (!community) return;

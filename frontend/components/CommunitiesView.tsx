@@ -305,6 +305,48 @@ export default function CommunitiesView() {
                 )}
               </section>
 
+              {/* Channel visibility */}
+              {can('manage_channels') && channelsOf(selected).length > 0 && (
+                <section className="space-y-2">
+                  <p className="font-mono text-[11px] tracking-[0.14em] text-ink-3 uppercase">Who can see each channel</p>
+                  {channelsOf(selected).map((c) => {
+                    const visibleTo = c!.roleIds ?? [];
+                    const restricted = visibleTo.length > 0;
+                    return (
+                      <div key={c!.id} className="flex flex-wrap items-center gap-1.5 text-[12px]">
+                        <span className="w-32 truncate font-mono text-ink-2">#{c!.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => run(() => api(`/api/communities/${selected.id}/channels/${c!.id}`, { method: 'PATCH', body: { roleIds: [] } }))}
+                          className={cx('rounded-full border px-2.5 py-0.5 font-mono text-[11px]', !restricted ? 'border-transparent brand-gradient text-[#0a0b0d]' : 'border-line text-ink-3 hover:text-ink')}
+                        >
+                          everyone
+                        </button>
+                        {roles
+                          .filter((r) => r.id !== 'owner' && r.id !== 'member')
+                          .map((r) => {
+                            const on = visibleTo.includes(r.id);
+                            return (
+                              <button
+                                key={r.id}
+                                type="button"
+                                onClick={() => {
+                                  const next = on ? visibleTo.filter((x) => x !== r.id) : [...visibleTo, r.id];
+                                  run(() => api(`/api/communities/${selected.id}/channels/${c!.id}`, { method: 'PATCH', body: { roleIds: next } }));
+                                }}
+                                className={cx('rounded-full border px-2.5 py-0.5 font-mono text-[11px] transition-colors', on ? 'border-transparent text-[#0a0b0d]' : 'border-line text-ink-3 hover:text-ink')}
+                                style={on ? { backgroundColor: r.color } : undefined}
+                              >
+                                {r.name}
+                              </button>
+                            );
+                          })}
+                      </div>
+                    );
+                  })}
+                </section>
+              )}
+
               {/* Roles */}
               {can('manage_roles') && (
                 <section className="rounded-2xl border border-line bg-surface p-4">

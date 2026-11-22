@@ -65,6 +65,8 @@ export interface DevChannel {
   isPrivate?: boolean;
   /** Participants, only set for direct messages. */
   members?: string[];
+  /** For community channels: when set, only these roles (and the owner) can see the channel. */
+  roleIds?: string[];
   communityId?: string;
 }
 

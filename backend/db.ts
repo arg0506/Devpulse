@@ -14,7 +14,7 @@ import {
   AgentWorkflow,
   PresenceStatus,
 } from '../frontend/types';
-import { DEFAULT_ROLES } from '../frontend/lib/permissions';
+import { DEFAULT_ROLES, communityPermissions } from '../frontend/lib/permissions';
 
 export type { DevCommunity, DevEvent };
 
@@ -578,7 +578,11 @@ class Database {
 
   /** Public channels plus the DMs the user participates in. */
   getChannelsForUser(userId: string): DevChannel[] {
-    return this.data.channels.filter((c) => c.category !== 'Direct Messages' || (c.members || []).includes(userId));
+    return this.data.channels.filter(
+      (c) =>
+        (c.category !== 'Direct Messages' || (c.members || []).includes(userId)) &&
+        (!c.communityId || !c.roleIds?.length || this.canSeePrivateChannel(c, userId)),
+    );
   }
 
   getChannel(id: string): DevChannel | undefined {
@@ -589,7 +593,29 @@ class Database {
     if (channelId.startsWith('dm:')) {
       return channelId.split(':').slice(1).includes(userId);
     }
+    const channel = this.getChannel(channelId);
+    if (channel?.communityId && channel.roleIds?.length) return this.canSeePrivateChannel(channel, userId);
     return true;
+  }
+
+  /** A private community channel is visible to its owner, administrators, and holders of one of its roles. */
+  private canSeePrivateChannel(channel: DevChannel, userId: string): boolean {
+    const community = channel.communityId ? this.findCommunity(channel.communityId) : undefined;
+    if (!community || !community.members.includes(userId)) return false;
+    if (community.ownerId === userId) return true;
+    const perms = communityPermissions(community, userId);
+    // Whoever can manage channels can see them all, so they can manage visibility too.
+    if (perms.has('administrator') || perms.has('manage_channels')) return true;
+    const held = new Set(['member', ...(community.memberRoles?.[userId] ?? [])]);
+    return channel.roleIds!.some((roleId) => held.has(roleId));
+  }
+
+  setChannelRoles(channelId: string, roleIds: string[]): DevChannel | undefined {
+    const channel = this.getChannel(channelId);
+    if (!channel) return undefined;
+    channel.roleIds = roleIds;
+    this.save();
+    return channel;
   }
 
   createChannel(channel: Omit<DevChannel, 'id'> & { id?: string }): DevChannel {
