@@ -29,7 +29,7 @@ function Rail() {
   const status = presenceOf(user.id)?.status || 'online';
 
   return (
-    <nav aria-label="Workspace" className="m-2 flex w-14 flex-shrink-0 flex-col items-center justify-between rounded-full border border-line bg-surface py-3">
+    <nav aria-label="Workspace" className="flex w-[72px] flex-shrink-0 flex-col items-center justify-between gap-2 bg-[#1e1f22] py-3">
       <div className="flex flex-col items-center gap-1">
         <div className="mb-3">
           <LemoMark size={28} />
@@ -44,8 +44,8 @@ function Rail() {
             title={label}
             style={view === v ? { backgroundColor: color } : undefined}
             className={cx(
-              'relative flex h-10 w-10 items-center justify-center rounded-full transition-all duration-200 hover:-translate-y-0.5',
-              view === v ? 'scale-110 text-[#0a0b0d] shadow-[0_6px_18px_-6px_rgba(0,0,0,0.8)]' : 'text-ink-3 hover:bg-subtle hover:text-ink',
+              'relative flex h-12 w-12 items-center justify-center transition-all duration-200',
+              view === v ? 'rounded-2xl text-[#0a0b0d]' : 'rounded-[24px] bg-[#313338] text-ink-2 hover:rounded-2xl hover:bg-[#5865f2] hover:text-white',
             )}
           >
             <Icon size={18} strokeWidth={view === v ? 2.1 : 1.8} />

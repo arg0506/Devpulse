@@ -23,17 +23,18 @@
   color-scheme: light;
 }
 
+/* Dark theme follows Discord's palette: chat canvas, channel list, hover and divider tones. */
 [data-theme='dark'] {
-  --c-canvas: #000000;
-  --c-surface: #0b0c10;
-  --c-subtle: #15171d;
-  --c-line: #1e2129;
-  --c-line-strong: #2c313c;
-  --c-ink: #eceef2;
-  --c-ink-2: #a4aab5;
-  --c-ink-3: #6c727e;
+  --c-canvas: #313338;
+  --c-surface: #2b2d31;
+  --c-subtle: #35373c;
+  --c-line: #1f2023;
+  --c-line-strong: #3f4147;
+  --c-ink: #f2f3f5;
+  --c-ink-2: #dbdee1;
+  --c-ink-3: #949ba4;
   --c-inverse: #111318;
-  --c-accent: #ff6670;
+  --c-accent: #f23f43;
   --c-ok: #35c387;
   --c-warn: #e5a632;
   --c-err: #ff6b76;
