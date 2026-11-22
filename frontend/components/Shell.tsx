@@ -16,12 +16,12 @@ import { SettingsModal } from './ProfileSheet';
 
 // Each section has its own colour; the active one fills with it.
 const NAV: { view: View; label: string; icon: typeof MessagesSquare; color: string }[] = [
-  { view: 'overview', label: 'Overview', icon: LayoutGrid, color: '#ff6670' },
-  { view: 'chat', label: 'Chat', icon: MessagesSquare, color: '#ffd23f' },
-  { view: 'communities', label: 'Communities', icon: Users, color: '#ff8fc7' },
-  { view: 'events', label: 'Events', icon: CalendarDays, color: '#3ddc97' },
-  { view: 'board', label: 'Whiteboard', icon: PenTool, color: '#7cc4ff' },
-  { view: 'agents', label: 'Agent studio', icon: Workflow, color: '#b49cff' },
+  { view: 'overview', label: 'Overview', icon: LayoutGrid, color: '#2f5bff' },
+  { view: 'chat', label: 'Chat', icon: MessagesSquare, color: '#2f5bff' },
+  { view: 'communities', label: 'Communities', icon: Users, color: '#2f5bff' },
+  { view: 'events', label: 'Events', icon: CalendarDays, color: '#2f5bff' },
+  { view: 'board', label: 'Whiteboard', icon: PenTool, color: '#2f5bff' },
+  { view: 'agents', label: 'Agent studio', icon: Workflow, color: '#2f5bff' },
 ];
 
 function Rail() {
@@ -46,7 +46,7 @@ function Rail() {
             style={view === v ? { backgroundColor: color } : undefined}
             className={cx(
               'relative flex h-12 w-12 items-center justify-center transition-all duration-200',
-              view === v ? 'rounded-2xl text-[#0a0b0d]' : 'rounded-[24px] bg-[#313338] text-ink-2 hover:rounded-2xl hover:bg-[#5865f2] hover:text-white',
+              view === v ? 'rounded-2xl text-white' : 'rounded-[24px] bg-[#313338] text-ink-2 hover:rounded-2xl hover:bg-[#5865f2] hover:text-white',
             )}
           >
             <Icon size={18} strokeWidth={view === v ? 2.1 : 1.8} />

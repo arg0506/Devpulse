@@ -72,7 +72,7 @@ function Sidebar({
           }}
           className={cx(
             'group flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] transition-colors',
-            active ? 'bg-[#404249] font-semibold text-ink' : count ? 'font-semibold text-ink hover:bg-[#35373c]' : 'text-ink-3 hover:bg-[#35373c] hover:text-ink-2',
+            active ? 'brand-gradient font-semibold text-white' : count ? 'font-semibold text-ink hover:bg-[#35373c]' : 'text-ink-3 hover:bg-[#35373c] hover:text-ink-2',
           )}
         >
           {icon}

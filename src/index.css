@@ -45,8 +45,9 @@
 }
 
 /* The brand gradient used by the landing page: primary actions and the active state. */
+/* The brand fill used for primary actions and active states: the landing page's electric blue. */
 .brand-gradient {
-  background: linear-gradient(110deg, #b49cff 0%, #ff8fc7 22%, #ff6670 42%, #ff9f43 60%, #ffd23f 76%, #3ddc97 90%, #7cc4ff 100%);
+  background: #2f5bff;
 }
 
 @theme inline {
