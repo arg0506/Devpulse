@@ -44,6 +44,13 @@ export interface DevMessage {
   reactions: MessageReaction[];
   isPinned?: boolean;
   isBot?: boolean;
+  /** The message this one replies to, with a short preview of its text. */
+  replyTo?: { id: string; username: string; text: string };
+  /** An inline image, sent as a data URL. */
+  attachment?: { name: string; type: string; dataUrl: string };
+  /** Usernames mentioned with @name in the text. */
+  mentions?: string[];
+  editedAt?: string;
 }
 
 export type ChannelCategory = 'Channels' | 'Guilds' | 'Direct Messages' | 'Events';
@@ -100,12 +107,36 @@ export interface ChatPresence {
   tier?: PlanTier;
 }
 
+export type Permission =
+  | 'administrator'
+  | 'manage_channels'
+  | 'manage_roles'
+  | 'manage_messages'
+  | 'manage_invites'
+  | 'kick_members'
+  | 'send_messages';
+
+export interface CommunityRole {
+  id: string;
+  name: string;
+  color: string;
+  permissions: Permission[];
+  /** Built-in roles cannot be deleted. */
+  isDefault?: boolean;
+}
+
 export interface DevCommunity {
   id: string;
   name: string;
   description: string;
   channels: string[];
   members: string[];
+  ownerId?: string;
+  /** Only sent to members who can manage invites. */
+  inviteCode?: string;
+  roles?: CommunityRole[];
+  /** userId -> role ids. Everyone also holds the "member" role. */
+  memberRoles?: Record<string, string[]>;
 }
 
 export interface DevEvent {

@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { randomBytes } from 'crypto';
 import {
   DevUser,
   DevMessage,
@@ -7,12 +8,28 @@ import {
   ThreadReply,
   WhiteboardElement,
   DevCommunity,
+  CommunityRole,
   DevEvent,
   AgentWorkflow,
   PresenceStatus,
 } from '../frontend/types';
+import { DEFAULT_ROLES } from '../frontend/lib/permissions';
 
 export type { DevCommunity, DevEvent };
+
+function newInviteCode(): string {
+  return randomBytes(4).toString('hex');
+}
+
+/** Fills in roles, ownership and an invite link for communities saved by older versions. */
+function shapeCommunity(c: DevCommunity): DevCommunity {
+  c.members = c.members || [];
+  c.roles = c.roles?.length ? c.roles : DEFAULT_ROLES.map((r) => ({ ...r, permissions: [...r.permissions] }));
+  c.memberRoles = c.memberRoles || {};
+  if (!c.ownerId && c.members.length) c.ownerId = c.members[0];
+  if (!c.inviteCode) c.inviteCode = newInviteCode();
+  return c;
+}
 
 const DATA_FILE = process.env.DEVPULSE_DATA_FILE || path.join(process.cwd(), 'backend-data.json');
 
@@ -32,6 +49,32 @@ interface DatabaseSchema {
   communities: DevCommunity[];
   events: DevEvent[];
   workflows: AgentWorkflow[];
+  friendRequests: FriendRequest[];
+  /** Pairs of user ids who are friends. */
+  friendships: [string, string][];
+  /** [by, target] pairs. */
+  blocks: [string, string][];
+  /** userId -> ISO time when the timeout ends. */
+  timeouts: Record<string, string>;
+  /** userId -> reason. */
+  bans: Record<string, string>;
+  auditLog: AuditEntry[];
+}
+
+export interface FriendRequest {
+  id: string;
+  from: string;
+  to: string;
+  createdAt: string;
+}
+
+export interface AuditEntry {
+  id: string;
+  at: string;
+  actor: string;
+  action: string;
+  target?: string;
+  detail?: string;
 }
 
 /** Returns an ISO date `days` from now at the given local hour. */
@@ -116,10 +159,10 @@ const INITIAL_MESSAGES: DevMessage[] = [
     channelId: 'general',
     userId: 'system-bot',
     username: 'system_bot',
-    role: 'DevPulse',
+    role: 'Lemo',
     avatarEmoji: '🤖',
     isBot: true,
-    text: 'Welcome to **DevPulse**. Chat in channels, sketch architecture on the whiteboard, wire up agents in the studio and open the console with Ctrl + backtick. Mention @gemini in any channel to ask the AI.',
+    text: 'Welcome to **Lemo**. Chat in channels, sketch architecture on the whiteboard, wire up agents in the studio and open the console with Ctrl + backtick. Mention @gemini in any channel to ask the AI.',
     timestamp: new Date(Date.now() - 3600000 * 3).toISOString(),
     repliesCount: 0,
     reactions: [{ emoji: '🚀', userIds: ['system-bot'] }],
@@ -177,7 +220,7 @@ const PRESET_USERS: Record<string, DevUser> = {
   'system-bot': {
     id: 'system-bot',
     username: 'system_bot',
-    role: 'DevPulse',
+    role: 'Lemo',
     avatarEmoji: '🤖',
     skills: ['Automation'],
     status: 'online',
@@ -213,6 +256,12 @@ class Database {
     communities: [...DEFAULT_COMMUNITIES],
     events: [...DEFAULT_EVENTS],
     workflows: [],
+    friendRequests: [],
+    friendships: [],
+    blocks: [],
+    timeouts: {},
+    bans: {},
+    auditLog: [],
   };
   private saveTimer: NodeJS.Timeout | null = null;
 
@@ -234,8 +283,15 @@ class Database {
           communities: parsed.communities?.length ? parsed.communities : [...DEFAULT_COMMUNITIES],
           events: parsed.events?.length ? parsed.events : [...DEFAULT_EVENTS],
           workflows: parsed.workflows || [],
+          friendRequests: parsed.friendRequests || [],
+          friendships: parsed.friendships || [],
+          blocks: parsed.blocks || [],
+          timeouts: parsed.timeouts || {},
+          bans: parsed.bans || {},
+          auditLog: parsed.auditLog || [],
         };
         this.migrate();
+        this.data.communities = this.data.communities.map(shapeCommunity);
         console.log('[db] Loaded', DATA_FILE);
       }
       for (const [id, user] of Object.entries(PRESET_USERS)) {
@@ -248,7 +304,7 @@ class Database {
     }
   }
 
-  /** Upgrades data written by older versions of DevPulse. */
+  /** Upgrades data written by older versions of Lemo. */
   private migrate() {
     for (const user of Object.values(this.data.users) as any[]) {
       // Older versions stored the email and password hash on the public profile.
@@ -333,6 +389,117 @@ class Database {
     return user;
   }
 
+  // ---------- Social: friends and blocks ----------
+  private pairKey(a: string, b: string): [string, string] {
+    return a < b ? [a, b] : [b, a];
+  }
+
+  areFriends(a: string, b: string): boolean {
+    const [x, y] = this.pairKey(a, b);
+    return this.data.friendships.some(([p, q]) => p === x && q === y);
+  }
+
+  friendIds(userId: string): string[] {
+    return this.data.friendships.filter(([p, q]) => p === userId || q === userId).map(([p, q]) => (p === userId ? q : p));
+  }
+
+  addFriendship(a: string, b: string) {
+    if (this.areFriends(a, b)) return;
+    this.data.friendships.push(this.pairKey(a, b));
+    this.save();
+  }
+
+  removeFriendship(a: string, b: string) {
+    const [x, y] = this.pairKey(a, b);
+    this.data.friendships = this.data.friendships.filter(([p, q]) => !(p === x && q === y));
+    this.save();
+  }
+
+  isBlocked(by: string, target: string): boolean {
+    return this.data.blocks.some(([b, t]) => b === by && t === target);
+  }
+
+  /** True when either side has blocked the other. */
+  isBlockedEitherWay(a: string, b: string): boolean {
+    return this.isBlocked(a, b) || this.isBlocked(b, a);
+  }
+
+  blockedIds(by: string): string[] {
+    return this.data.blocks.filter(([b]) => b === by).map(([, t]) => t);
+  }
+
+  setBlock(by: string, target: string, blocked: boolean) {
+    this.data.blocks = this.data.blocks.filter(([b, t]) => !(b === by && t === target));
+    if (blocked) this.data.blocks.push([by, target]);
+    if (blocked) this.removeFriendship(by, target);
+    this.save();
+  }
+
+  // ---------- Moderation ----------
+  /** Admins are listed in LEMO_ADMINS. With no list, the first account created is the admin. */
+  isAdmin(userId: string): boolean {
+    const user = this.data.users[userId];
+    if (!user) return false;
+    const listed = (process.env.LEMO_ADMINS || '')
+      .split(',')
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean);
+    if (listed.length) return listed.includes(user.username.toLowerCase());
+    const first = Object.values(this.data.users)
+      .filter((u) => !BOT_IDS.has(u.id))
+      .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)))[0];
+    return first?.id === userId;
+  }
+
+  timeoutUntil(userId: string): string | undefined {
+    const until = this.data.timeouts[userId];
+    if (!until) return undefined;
+    if (new Date(until).getTime() <= Date.now()) {
+      delete this.data.timeouts[userId];
+      return undefined;
+    }
+    return until;
+  }
+
+  setTimeoutFor(userId: string, until: string | null) {
+    if (until) this.data.timeouts[userId] = until;
+    else delete this.data.timeouts[userId];
+    this.save();
+  }
+
+  isBannedUser(userId: string): boolean {
+    return userId in this.data.bans;
+  }
+
+  banReason(userId: string): string | undefined {
+    return this.data.bans[userId];
+  }
+
+  setBan(userId: string, reason: string | null) {
+    if (reason !== null) this.data.bans[userId] = reason;
+    else delete this.data.bans[userId];
+    this.save();
+  }
+
+  audit(entry: Omit<AuditEntry, 'id' | 'at'>) {
+    this.data.auditLog.unshift({ id: `aud-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, at: new Date().toISOString(), ...entry });
+    this.data.auditLog = this.data.auditLog.slice(0, 200);
+    this.save();
+  }
+
+  getAuditLog(): AuditEntry[] {
+    return this.data.auditLog;
+  }
+
+  getFriendRequests(): FriendRequest[] {
+    return this.data.friendRequests;
+  }
+
+  setFriendRequests(list: FriendRequest[]) {
+    this.data.friendRequests = list;
+    this.save();
+  }
+
   getUsers(): DevUser[] {
     return Object.values(this.data.users);
   }
@@ -413,6 +580,15 @@ class Database {
     this.data.messages.push(message);
     this.save();
     return message;
+  }
+
+  editMessage(id: string, text: string, editedAt: string): DevMessage | undefined {
+    const msg = this.data.messages.find((m) => m.id === id);
+    if (!msg) return undefined;
+    msg.text = text;
+    msg.editedAt = editedAt;
+    this.save();
+    return msg;
   }
 
   deleteMessage(id: string) {
@@ -502,7 +678,15 @@ class Database {
       category: 'Guilds',
       communityId: id,
     });
-    const created: DevCommunity = { id, name, description, channels: [chan.id], members: [creatorId] };
+    const created: DevCommunity = shapeCommunity({
+      id,
+      name,
+      description,
+      channels: [chan.id],
+      members: [creatorId],
+      ownerId: creatorId,
+      memberRoles: {},
+    });
     this.data.communities.push(created);
     this.save();
     return created;
@@ -513,8 +697,85 @@ class Database {
     if (!comm) return undefined;
     comm.members = comm.members || [];
     comm.members = comm.members.includes(userId) ? comm.members.filter((id) => id !== userId) : [...comm.members, userId];
+    if (!comm.members.includes(userId) && comm.memberRoles) delete comm.memberRoles[userId];
     this.save();
     return comm;
+  }
+
+  // ---------- Community roles, members and invites ----------
+  findCommunity(id: string): DevCommunity | undefined {
+    return this.data.communities.find((c) => c.id === id);
+  }
+
+  findCommunityByInvite(code: string): DevCommunity | undefined {
+    return this.data.communities.find((c) => c.inviteCode === code);
+  }
+
+  joinCommunity(communityId: string, userId: string): DevCommunity | undefined {
+    const comm = this.findCommunity(communityId);
+    if (!comm) return undefined;
+    if (!comm.members.includes(userId)) comm.members = [...comm.members, userId];
+    this.save();
+    return comm;
+  }
+
+  createCommunityRole(communityId: string, role: CommunityRole): CommunityRole | undefined {
+    const comm = this.findCommunity(communityId);
+    if (!comm) return undefined;
+    comm.roles = [...(comm.roles || []), role];
+    this.save();
+    return role;
+  }
+
+  updateCommunityRole(communityId: string, roleId: string, patch: Partial<CommunityRole>): CommunityRole | undefined {
+    const role = this.findCommunity(communityId)?.roles?.find((r) => r.id === roleId);
+    if (!role) return undefined;
+    Object.assign(role, patch);
+    this.save();
+    return role;
+  }
+
+  deleteCommunityRole(communityId: string, roleId: string) {
+    const comm = this.findCommunity(communityId);
+    if (!comm) return;
+    comm.roles = (comm.roles || []).filter((r) => r.id !== roleId);
+    for (const id of Object.keys(comm.memberRoles || {})) {
+      comm.memberRoles![id] = comm.memberRoles![id].filter((r) => r !== roleId);
+    }
+    this.save();
+  }
+
+  setMemberRoles(communityId: string, userId: string, roleIds: string[]) {
+    const comm = this.findCommunity(communityId);
+    if (!comm) return;
+    comm.memberRoles = comm.memberRoles || {};
+    comm.memberRoles[userId] = roleIds;
+    this.save();
+  }
+
+  kickMember(communityId: string, userId: string) {
+    const comm = this.findCommunity(communityId);
+    if (!comm) return;
+    comm.members = comm.members.filter((id) => id !== userId);
+    if (comm.memberRoles) delete comm.memberRoles[userId];
+    this.save();
+  }
+
+  regenerateInvite(communityId: string): string | undefined {
+    const comm = this.findCommunity(communityId);
+    if (!comm) return undefined;
+    comm.inviteCode = newInviteCode();
+    this.save();
+    return comm.inviteCode;
+  }
+
+  addCommunityChannel(communityId: string, name: string, description: string): DevChannel | undefined {
+    const comm = this.findCommunity(communityId);
+    if (!comm) return undefined;
+    const channel = this.createChannel({ name, description, category: 'Guilds', communityId });
+    comm.channels = [...comm.channels, channel.id];
+    this.save();
+    return channel;
   }
 
   // ---------- Events ----------
