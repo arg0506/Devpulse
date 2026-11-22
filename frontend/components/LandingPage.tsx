@@ -156,88 +156,6 @@ function WindowChrome({ title }: { title: string }) {
   );
 }
 
-/**
- * Floating bubble at the top of the page. It scrolls away with the page rather than staying fixed.
- * A gradient pill slides under the link the pointer is on, or under the section currently in view.
- */
-function SiteNav({ onGetStarted, onSignIn }: LandingPageProps) {
-  const [active, setActive] = useState<string | null>(null);
-  const [hover, setHover] = useState<string | null>(null);
-  const [pill, setPill] = useState({ left: 0, width: 0, visible: false });
-  const linkRefs = useRef<Record<string, HTMLAnchorElement | null>>({});
-  const current = hover ?? active;
-
-  useEffect(() => {
-    if (!('IntersectionObserver' in window)) return;
-    const io = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) if (entry.isIntersecting) setActive(entry.target.id);
-      },
-      { rootMargin: '-45% 0px -50% 0px' },
-    );
-    NAV_LINKS.forEach(({ id }) => {
-      const el = document.getElementById(id);
-      if (el) io.observe(el);
-    });
-    return () => io.disconnect();
-  }, []);
-
-  useEffect(() => {
-    const el = current ? linkRefs.current[current] : null;
-    if (!el) {
-      setPill((p) => ({ ...p, visible: false }));
-      return;
-    }
-    setPill({ left: el.offsetLeft, width: el.offsetWidth, visible: true });
-  }, [current]);
-
-  return (
-    <nav className="absolute top-6 left-1/2 z-30 flex h-14 w-[min(calc(100%-2.5rem),58rem)] -translate-x-1/2 items-center justify-between gap-4 rounded-full border border-white/10 bg-[#0b0c10]/85 py-1.5 pr-1.5 pl-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.07),0_24px_60px_-20px_rgba(0,0,0,0.95)] backdrop-blur-xl">
-      <Wordmark />
-      <ul className="relative hidden items-center gap-1 rounded-full bg-white/[0.04] p-1 xl:flex" onMouseLeave={() => setHover(null)}>
-        <span
-          aria-hidden="true"
-          className="absolute top-1 bottom-1 rounded-full transition-all duration-300 ease-out"
-          style={{ left: pill.left, width: pill.width, opacity: pill.visible ? 1 : 0, background: GRADIENT }}
-        />
-        {NAV_LINKS.map((link) => (
-          <li key={link.id}>
-            <a
-              href={`#${link.id}`}
-              ref={(el) => {
-                linkRefs.current[link.id] = el;
-              }}
-              aria-current={active === link.id ? 'true' : undefined}
-              onMouseEnter={() => setHover(link.id)}
-              onFocus={() => setHover(link.id)}
-              onBlur={() => setHover(null)}
-              className={cx(
-                'relative z-10 block rounded-full px-4 py-2 text-[13px] transition-colors duration-300',
-                current === link.id ? 'font-semibold text-[#0a0b0d]' : 'text-ink-2 hover:text-ink',
-              )}
-            >
-              {link.label}
-            </a>
-          </li>
-        ))}
-      </ul>
-      <div className="flex items-center gap-1">
-        <button type="button" onClick={onSignIn} className="rounded-full px-4 py-2 text-[13px] font-medium text-ink-2 transition-colors hover:text-ink">
-          Sign in
-        </button>
-        <button
-          type="button"
-          onClick={() => onGetStarted()}
-          className="group flex items-center gap-1.5 rounded-full px-5 py-2.5 text-[13px] font-semibold text-[#0a0b0d] transition-transform hover:scale-[1.04]"
-          style={{ background: GRADIENT }}
-        >
-          Start for free
-          <ArrowRight size={14} className="transition-transform group-hover:translate-x-0.5" />
-        </button>
-      </div>
-    </nav>
-  );
-}
 
 /** A clean mock of the actual workspace, shown as the hero visual. */
 function ProductMockup() {
@@ -658,6 +576,20 @@ const FAQS = [
   },
 ];
 
+/** A small pixel-art character for the hero stage. Each string is a row; '#' marks a lit pixel. */
+const INVADER_ROWS = ['..#.....#..', '...#...#...', '..#######..', '.##.###.##', '###########', '#.#######.#', '#.#.....#.#', '...##.##...'];
+
+function PixelInvader({ className }: { className?: string }) {
+  const cells = INVADER_ROWS.flatMap((row, y) => row.split('').map((c, x) => (c === '#' ? { x, y } : null))).filter(Boolean) as { x: number; y: number }[];
+  return (
+    <svg viewBox="0 0 11 8" className={className} aria-hidden="true" shapeRendering="crispEdges">
+      {cells.map((c) => (
+        <rect key={`${c.x}-${c.y}`} x={c.x} y={c.y} width="1" height="1" fill="#9bb8ff" />
+      ))}
+    </svg>
+  );
+}
+
 /** Soft cloud shapes that frame a headline on wide screens. */
 function CloudDecor({ className, flip, color }: { className: string; flip?: boolean; color: string }) {
   return (
@@ -766,41 +698,95 @@ function SiteFooter({ onGetStarted, onSignIn }: LandingPageProps) {
 export default function LandingPage({ onGetStarted, onSignIn }: LandingPageProps) {
   return (
     <div className="relative min-h-full text-ink" style={{ ...DARK_TOKENS, backgroundColor: '#000000' }}>
-      <SiteNav onGetStarted={onGetStarted} onSignIn={onSignIn} />
 
       {/* Hero */}
-      <header className="relative overflow-hidden bg-canvas px-5 pt-36 pb-24 md:pt-44">
-        <div className="mx-auto max-w-6xl">
-          <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-28">
-            <div className="text-center lg:text-left">
-              <h1 className={cx('animate-fade-up text-ink', DISPLAY_TITLE)} style={{ animationDelay: '80ms' }}>
-                Build together,
-                <br />
-                <span style={GRADIENT_TEXT}>ship faster.</span>
-              </h1>
-              <p className={cx('animate-fade-up text-ink-2 lg:mx-0', DISPLAY_LEAD)} style={{ animationDelay: '160ms' }}>
-                Channels, a shared whiteboard, a visual agent builder and a console, all in one live workspace built for developer teams.
-              </p>
-              <div className="animate-fade-up mt-9 flex flex-wrap justify-center gap-3 lg:justify-start" style={{ animationDelay: '240ms' }}>
-                <button
-                  type="button"
-                  onClick={() => onGetStarted()}
-                  className="inline-flex items-center gap-2 rounded-md px-6 py-3 font-semibold text-[#0a0b0d] transition-transform hover:scale-[1.03]"
-                  style={{ background: GRADIENT }}
-                >
-                  Start for free <ArrowRight size={16} />
-                </button>
-                <Button size="lg" onClick={() => scrollToSection('features')}>
-                  See the features
-                </Button>
-              </div>
-            </div>
-            <div className="animate-fade-up mx-auto w-full max-w-[340px]" style={{ animationDelay: '200ms' }}>
-              <div className="overflow-hidden rounded-3xl border-2 border-[#0a0b0d] shadow-[10px_10px_0_0_#ff9f43]">
-                <TiltImage src={HERO_FIGURE} alt="Illustration of a person in a yellow turtleneck with a white cat on their head" />
+      {/* Hero: a monitor on a blue stage, with the site inside the screen */}
+      <header className="relative overflow-hidden bg-[#0a1a4f] px-4 pt-10 pb-24 md:pt-16">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 opacity-60"
+          style={{
+            backgroundImage:
+              'radial-gradient(rgba(255,255,255,0.35) 1px, transparent 1px), radial-gradient(rgba(255,255,255,0.18) 1px, transparent 1px)',
+            backgroundSize: '90px 90px, 37px 37px',
+            backgroundPosition: '0 0, 17px 23px',
+          }}
+        />
+        <div className="relative mx-auto max-w-5xl">
+          {/* Monitor */}
+          <div className="animate-fade-up rounded-[28px] bg-[#0b0c10] p-3 shadow-[0_50px_120px_-30px_rgba(37,99,235,0.7)]" style={{ animationDelay: '60ms' }}>
+            <div className="overflow-hidden rounded-[18px] bg-white text-[#0a0b0d]">
+              {/* Screen navigation */}
+              <nav className="flex h-14 items-center justify-between px-6">
+                <Wordmark />
+                <div className="hidden items-center gap-7 text-[12px] text-[#0a0b0d]/75 md:flex">
+                  {NAV_LINKS.map((link) => (
+                    <a key={link.id} href={`#${link.id}`} className="hover:text-[#0a0b0d]">
+                      {link.label}
+                    </a>
+                  ))}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button type="button" onClick={onSignIn} className="rounded-lg border border-[#0a0b0d]/15 px-4 py-2 text-[12px] font-semibold">
+                    Log in
+                  </button>
+                  <button type="button" onClick={() => onGetStarted()} className="rounded-lg bg-[#0a0b0d] px-4 py-2 text-[12px] font-semibold text-white">
+                    Get started
+                  </button>
+                </div>
+              </nav>
+
+              {/* Blue hero card */}
+              <div className="relative mx-3 mb-3 overflow-hidden rounded-2xl bg-[#2f5bff] px-6 pt-10 pb-12 text-center text-white">
+                <div aria-hidden="true" className="pointer-events-none absolute -right-10 -top-10 h-44 w-44 rounded-full bg-[#7fa3ff]/50 blur-2xl" />
+                <div aria-hidden="true" className="pointer-events-none absolute -bottom-12 -left-8 h-40 w-40 rounded-full bg-[#9bb8ff]/40 blur-2xl" />
+
+                <a href="#features" className="relative mx-auto inline-flex items-center gap-2 rounded-md bg-[#0a0b0d] px-3 py-1.5 text-[11px] font-medium text-white">
+                  New: voice channels are live <ArrowRight size={12} />
+                </a>
+
+                {/* Decorative pixel character */}
+                <PixelInvader className="absolute left-6 top-16 hidden h-14 w-14 md:block" />
+
+                <h1 className="relative mx-auto mt-8 font-display text-[44px] leading-[0.95] font-extrabold tracking-[-0.04em] sm:text-[60px] md:text-[76px]">
+                  Build together
+                  <br />
+                  <span className="relative inline-block -rotate-2 rounded-2xl bg-white px-4 py-1 text-[#0a0b0d] shadow-[0_8px_0_0_#0a0b0d]">
+                    for developers
+                  </span>
+                </h1>
+                <p className="relative mx-auto mt-6 max-w-md text-[13px] leading-relaxed text-white/85">
+                  Channels, voice, a shared whiteboard and an agent builder in one live workspace. Your team stays in sync, every change reaches everyone.
+                </p>
+
+                {/* Side cards */}
+                <div className="absolute left-8 bottom-6 hidden w-40 -rotate-3 rounded-2xl bg-white p-2 shadow-xl md:block">
+                  <img src={HERO_FIGURE} alt="" className="h-40 w-full rounded-xl object-cover" draggable={false} />
+                </div>
+                <div className="absolute right-8 top-10 hidden w-48 rotate-3 rounded-2xl bg-white p-3 text-left text-[#0a0b0d] shadow-xl md:block">
+                  <p className="font-mono text-[10px] text-[#0a0b0d]/50">#react-vite</p>
+                  <p className="mt-1 text-[12px] font-semibold">dan_abramov</p>
+                  <p className="text-[11.5px] text-[#0a0b0d]/70">Throttle socket updates to 60ms.</p>
+                  <p className="mt-2 text-[12px] font-semibold">gemini</p>
+                  <p className="text-[11.5px] text-[#0a0b0d]/70">Debounce typing events separately.</p>
+                </div>
+
+                {/* Action pill */}
+                <div className="relative mx-auto mt-8 inline-flex items-center gap-1 rounded-2xl bg-white p-1.5 shadow-lg">
+                  <button type="button" onClick={() => onGetStarted()} className="rounded-xl bg-[#0a0b0d] px-5 py-2.5 text-[13px] font-semibold text-white">
+                    Open an account
+                  </button>
+                  <button type="button" onClick={() => scrollToSection('pricing')} className="rounded-xl px-5 py-2.5 text-[13px] font-semibold text-[#0a0b0d]">
+                    See pricing
+                  </button>
+                </div>
               </div>
             </div>
           </div>
+          {/* Stand */}
+          <div aria-hidden="true" className="mx-auto h-10 w-44 rounded-b-2xl bg-[#0b0c10]" />
+          <div aria-hidden="true" className="mx-auto h-2 w-64 rounded-full bg-[#0b0c10]" />
+
           <div className="animate-fade-up mt-20" style={{ animationDelay: '400ms' }}>
             <ProductMockup />
           </div>
