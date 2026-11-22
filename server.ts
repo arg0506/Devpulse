@@ -73,6 +73,14 @@ async function startServer() {
     app.get('*', (_req, res) => res.sendFile(path.join(distPath, 'index.html')));
   }
 
+  // Write any pending data before exiting so a restart does not lose the last changes.
+  for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+    process.once(signal, () => {
+      db.flush();
+      process.exit(0);
+    });
+  }
+
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`[DevPulse] http://localhost:${PORT}`);
   });

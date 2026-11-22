@@ -12,6 +12,15 @@ export const PLANS: Record<'pro' | 'enterprise', { name: string; tier: PlanTier;
   enterprise: { name: 'Enterprise', tier: 'Enterprise', amountCents: 9900 },
 };
 
+type PlanKey = keyof typeof PLANS;
+
+/** Only real plan keys count: a plain object lookup would also accept names such as "constructor". */
+function planFor(key: unknown): ({ key: PlanKey } & (typeof PLANS)[PlanKey]) | null {
+  if (typeof key !== 'string' || !Object.prototype.hasOwnProperty.call(PLANS, key)) return null;
+  const planKey = key as PlanKey;
+  return { key: planKey, ...PLANS[planKey] };
+}
+
 let stripeInstance: Stripe | null = null;
 function getStripe(): Stripe | null {
   const key = process.env.STRIPE_SECRET_KEY;
@@ -27,9 +36,9 @@ router.get('/config', (_req, res) => {
 /** Starts a checkout. The amount always comes from the server-side plan table, never the client. */
 router.post('/create-payment-intent', authMiddleware, async (req: AuthenticatedRequest, res) => {
   try {
-    const planKey = req.body?.plan as keyof typeof PLANS;
-    const plan = PLANS[planKey];
+    const plan = planFor(req.body?.plan);
     if (!plan) return res.status(400).json({ error: 'Choose the Pro or Enterprise plan.' });
+    const planKey = plan.key;
 
     const stripe = getStripe();
     if (stripe) {
@@ -57,26 +66,34 @@ router.post('/create-payment-intent', authMiddleware, async (req: AuthenticatedR
 
 router.post('/confirm-payment', authMiddleware, async (req: AuthenticatedRequest, res) => {
   try {
-    const planKey = req.body?.plan as keyof typeof PLANS;
-    const plan = PLANS[planKey];
+    const plan = planFor(req.body?.plan);
     const paymentIntentId = String(req.body?.paymentIntentId || '');
     if (!plan) return res.status(400).json({ error: 'Choose the Pro or Enterprise plan.' });
+    const userId = req.user!.userId;
 
     const stripe = getStripe();
     if (stripe) {
-      // In live mode, only upgrade once Stripe reports the payment as complete.
+      // In live mode, only upgrade once Stripe reports this exact payment as complete:
+      // same account, same plan and same amount. Otherwise a cheap plan's payment could
+      // be replayed to unlock a dearer one.
+      if (!paymentIntentId.startsWith('pi_')) return res.status(400).json({ error: 'Unknown payment reference.' });
       const intent = await stripe.paymentIntents.retrieve(paymentIntentId);
-      if (intent.status !== 'succeeded' || intent.metadata.userId !== req.user!.userId) {
-        return res.status(402).json({ error: 'Stripe has not confirmed this payment yet.' });
-      }
+      const matches =
+        intent.status === 'succeeded' &&
+        intent.amount === plan.amountCents &&
+        intent.currency === 'usd' &&
+        intent.metadata.userId === userId &&
+        intent.metadata.plan === plan.key;
+      if (!matches) return res.status(402).json({ error: 'Stripe has not confirmed this payment yet.' });
     } else if (!paymentIntentId.startsWith('demo_')) {
       return res.status(400).json({ error: 'Unknown payment reference.' });
     }
 
-    const user = db.getUser(req.user!.userId);
+    const user = db.getUser(userId);
     if (!user) return res.status(404).json({ error: 'This account no longer exists.' });
     const updated = db.saveUser({ ...user, tier: plan.tier, paymentStatus: 'paid', paymentIntentId });
-    getIO()?.emit('user:updated', updated);
+    // Billing details belong to the account holder only, so send the update to their socket room.
+    getIO()?.to(`user:${userId}`).emit('user:updated', updated);
     broadcastPresence();
     return res.json({ success: true, user: updated });
   } catch (error: any) {

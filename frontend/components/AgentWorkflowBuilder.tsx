@@ -327,6 +327,8 @@ export default function AgentWorkflowBuilder() {
 
   const connect = (fromId: string, toId: string) => {
     if (fromId === toId) return;
+    // Triggers start a run, so nothing may feed into one.
+    if (nodes.find((n) => n.id === toId)?.type === 'trigger') return;
     if (edges.some((e) => e.fromId === fromId && e.toId === toId)) return;
     // Reject links that would create a loop.
     const reaches = (start: string, target: string): boolean => {
@@ -411,7 +413,13 @@ export default function AgentWorkflowBuilder() {
 
   const removeSaved = async (id: string) => {
     if (!confirm('Delete this saved workflow?')) return;
-    await api(`/api/agents/workflows/${id}`, { method: 'DELETE' }).catch(() => undefined);
+    try {
+      await api(`/api/agents/workflows/${id}`, { method: 'DELETE' });
+    } catch (err: any) {
+      // Only drop it from the list once the server has really deleted it.
+      setLog((l) => [...l, { t: new Date().toLocaleTimeString(), text: `Delete failed: ${err.message}`, tone: 'err' }]);
+      return;
+    }
     setSaved((prev) => prev.filter((w) => w.id !== id));
     if (workflow.id === id) setDirty(true);
   };
@@ -441,6 +449,8 @@ export default function AgentWorkflowBuilder() {
     nodes.forEach((n) => (indeg[n.id] = 0));
     edges.forEach((e) => indeg[e.toId] !== undefined && indeg[e.toId]++);
     const queue = nodes.filter((n) => n.type === 'trigger').map((n) => n.id);
+    // Each node is queued at most once, even when a trigger or a merge point is reached again.
+    const queued = new Set(queue);
     const out: string[] = [];
     const reachable = new Set(queue);
     while (queue.length) {
@@ -451,7 +461,10 @@ export default function AgentWorkflowBuilder() {
         .forEach((e) => {
           reachable.add(e.toId);
           indeg[e.toId]--;
-          if (indeg[e.toId] <= 0) queue.push(e.toId);
+          if (indeg[e.toId] <= 0 && !queued.has(e.toId)) {
+            queued.add(e.toId);
+            queue.push(e.toId);
+          }
         });
     }
     return out.filter((id) => reachable.has(id));
@@ -570,7 +583,9 @@ export default function AgentWorkflowBuilder() {
     return out;
   }, [selected, nodes, edges]);
 
-  const VariableChips = ({ onInsert }: { onInsert: (v: string) => void }) => (
+  // A plain render helper, not a component: a component declared here would be a new type on every
+  // render, so React would remount its buttons on each keystroke.
+  const variableChips = (onInsert: (v: string) => void) => (
     <div className="mt-1.5 flex flex-wrap gap-1">
       {['{{prev}}', '{{trigger.message}}', ...upstream.map((n) => `{{${n.id}.result}}`)].map((v) => {
         const node = upstream.find((n) => v.includes(n.id));
@@ -950,7 +965,7 @@ export default function AgentWorkflowBuilder() {
                       value={selected.config.prompt || ''}
                       onChange={(e) => updateConfig(selected.id, { prompt: e.target.value })}
                     />
-                    <VariableChips onInsert={(v) => updateConfig(selected.id, { prompt: (selected.config.prompt || '') + v })} />
+                    {variableChips((v) => updateConfig(selected.id, { prompt: (selected.config.prompt || '') + v }))}
                   </div>
                   <div>
                     <label className="label" htmlFor="nd-sys">
@@ -997,7 +1012,7 @@ export default function AgentWorkflowBuilder() {
                     value={selected.config.searchQuery || ''}
                     onChange={(e) => updateConfig(selected.id, { searchQuery: e.target.value })}
                   />
-                  <VariableChips onInsert={(v) => updateConfig(selected.id, { searchQuery: (selected.config.searchQuery || '') + v })} />
+                  {variableChips((v) => updateConfig(selected.id, { searchQuery: (selected.config.searchQuery || '') + v }))}
                 </div>
               )}
 
@@ -1082,7 +1097,7 @@ export default function AgentWorkflowBuilder() {
                       value={selected.config.payloadTemplate || ''}
                       onChange={(e) => updateConfig(selected.id, { payloadTemplate: e.target.value })}
                     />
-                    <VariableChips onInsert={(v) => updateConfig(selected.id, { payloadTemplate: (selected.config.payloadTemplate || '') + v })} />
+                    {variableChips((v) => updateConfig(selected.id, { payloadTemplate: (selected.config.payloadTemplate || '') + v }))}
                   </div>
                 </>
               )}

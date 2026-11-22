@@ -198,6 +198,14 @@ const PRESET_USERS: Record<string, DevUser> = {
 
 export const BOT_IDS = new Set(['system-bot', 'gemini-bot']);
 
+/** Lowercase, hyphen-separated id fragment, e.g. "Rust Folks!" -> "rust-folks". Empty if nothing usable remains. */
+export function slugify(raw: string): string {
+  return raw
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
 export function dmChannelId(a: string, b: string): string {
   return 'dm:' + [a, b].sort().join(':');
 }
@@ -215,6 +223,8 @@ class Database {
     workflows: [],
   };
   private saveTimer: NodeJS.Timeout | null = null;
+  /** Set when an unreadable data file could not be moved aside; writing then would destroy it. */
+  private readOnly = false;
 
   constructor() {
     this.load();
@@ -243,8 +253,22 @@ class Database {
       }
       this.saveNow();
     } catch (err) {
-      console.error('[db] Could not load data file, starting fresh', err);
+      // Keep the unreadable file for recovery instead of overwriting it with seed data.
+      console.error('[db] Could not read the data file; moving it aside and starting fresh.', err);
+      this.preserveUnreadableFile();
       this.saveNow();
+    }
+  }
+
+  private preserveUnreadableFile() {
+    try {
+      if (!fs.existsSync(DATA_FILE)) return;
+      const backup = `${DATA_FILE}.corrupt-${Date.now()}`;
+      fs.renameSync(DATA_FILE, backup);
+      console.error(`[db] Unreadable data moved to ${backup}`);
+    } catch (err) {
+      this.readOnly = true;
+      console.error('[db] Could not move the unreadable data file aside; not overwriting it.', err);
     }
   }
 
@@ -266,8 +290,12 @@ class Database {
   }
 
   private saveNow() {
+    if (this.readOnly) return;
     try {
-      fs.writeFileSync(DATA_FILE, JSON.stringify(this.data, null, 2), 'utf-8');
+      // Write beside the file and rename, so a crash mid-write cannot leave a truncated data file.
+      const tmp = `${DATA_FILE}.tmp`;
+      fs.writeFileSync(tmp, JSON.stringify(this.data, null, 2), 'utf-8');
+      fs.renameSync(tmp, DATA_FILE);
     } catch (err) {
       console.error('[db] Error saving data file', err);
     }
@@ -280,6 +308,15 @@ class Database {
       this.saveTimer = null;
       this.saveNow();
     }, 250);
+  }
+
+  /** Writes any pending change immediately. Call on shutdown so the last 250 ms are not lost. */
+  flush() {
+    if (this.saveTimer) {
+      clearTimeout(this.saveTimer);
+      this.saveTimer = null;
+    }
+    this.saveNow();
   }
 
   // ---------- Users ----------
@@ -377,12 +414,7 @@ class Database {
   }
 
   createChannel(channel: Omit<DevChannel, 'id'> & { id?: string }): DevChannel {
-    const id =
-      channel.id ||
-      channel.name
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-|-$/g, '');
+    const id = channel.id || slugify(channel.name);
     const existing = this.data.channels.find((c) => c.id === id);
     if (existing) return existing;
     const created: DevChannel = { ...channel, id };
@@ -488,10 +520,7 @@ class Database {
   }
 
   createCommunity(name: string, description: string, creatorId: string): DevCommunity {
-    const slug = name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '');
+    const slug = slugify(name);
     const id = 'comm-' + slug;
     const existing = this.data.communities.find((c) => c.id === id);
     if (existing) return existing;

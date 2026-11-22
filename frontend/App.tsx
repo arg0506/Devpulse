@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { DevUser } from './types';
-import { api, getToken, setToken } from './lib/api';
+import { api, ApiError, getToken, setToken } from './lib/api';
 import { socket } from './socket';
 import { WorkspaceProvider } from './lib/workspace';
 import LandingPage from './components/LandingPage';
@@ -23,8 +23,10 @@ export default function App() {
         setUser(me);
         setScreen('app');
       })
-      .catch(() => {
-        setToken(null);
+      .catch((err) => {
+        // Only a rejected token ends the session. A network blip or a restarting server keeps it,
+        // so the next visit can restore the session.
+        if (err instanceof ApiError && (err.status === 401 || err.status === 404)) setToken(null);
         setScreen('landing');
       });
   }, []);

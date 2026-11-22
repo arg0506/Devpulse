@@ -215,15 +215,19 @@ export function Modal({
   width?: number;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
+  // Callers pass a new onClose on every render. Keep the latest in a ref so the effect below
+  // does not re-run (and re-focus the first field) each time the parent re-renders while typing.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onCloseRef.current();
     window.addEventListener('keydown', onKey);
     const first = panelRef.current?.querySelector<HTMLElement>('input, textarea, select, button:not([data-close])');
     first?.focus();
     return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
   return (

@@ -69,9 +69,9 @@ router.post('/register', async (req, res) => {
           email: lowerEmail,
           password: passwordHash,
           username,
-          bio: req.body.bio || null,
-          gitHubHandle: req.body.gitHubHandle || null,
-          techTags: Array.isArray(req.body.skills) ? req.body.skills : [],
+          bio: req.body.bio ? String(req.body.bio).slice(0, 280) : null,
+          gitHubHandle: req.body.gitHubHandle ? String(req.body.gitHubHandle).slice(0, 39) : null,
+          techTags: Array.isArray(req.body.skills) ? req.body.skills.slice(0, 6).map(String) : [],
         },
       });
       userId = created.id;

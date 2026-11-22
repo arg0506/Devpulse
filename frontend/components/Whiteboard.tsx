@@ -190,6 +190,9 @@ export default function Whiteboard({ active }: { active: boolean }) {
   const [cursors, setCursors] = useState<Record<string, RemoteCursor>>({});
   const [myIds, setMyIds] = useState<string[]>([]);
 
+  // Set once a text label is committed, so the Enter key and the blur that follows cannot both add it.
+  const textCommitted = useRef(false);
+
   const drag = useRef<{
     mode: 'draw' | 'move' | 'pan' | 'erase';
     startX: number;
@@ -313,6 +316,10 @@ export default function Whiteboard({ active }: { active: boolean }) {
       return;
     }
     if (tool === 'text') {
+      // Stop the browser's default mousedown focus change: it runs after this handler, would blur
+      // the new input straight away, and the empty label would be discarded.
+      e.preventDefault();
+      textCommitted.current = false;
       setTextInput({ x: p.x, y: p.y, value: '' });
       return;
     }
@@ -437,13 +444,13 @@ export default function Whiteboard({ active }: { active: boolean }) {
   };
 
   const undo = useCallback(() => {
-    setMyIds((ids) => {
-      const remaining = ids.filter((id) => elements.some((e) => e.id === id));
-      const last = remaining[remaining.length - 1];
-      if (last) remove(last);
-      return remaining.slice(0, -1);
-    });
-  }, [elements, remove]);
+    // Work out the target outside the state updater: updaters run twice in StrictMode,
+    // and removing a shape emits a socket event.
+    const existing = myIds.filter((id) => elements.some((e) => e.id === id));
+    const last = existing[existing.length - 1];
+    if (last) remove(last);
+    setMyIds(existing.slice(0, last ? -1 : undefined));
+  }, [elements, myIds, remove]);
 
   const exportPng = () => {
     const canvas = canvasRef.current;
@@ -491,6 +498,8 @@ export default function Whiteboard({ active }: { active: boolean }) {
   }, [active, selectedId, undo, remove]);
 
   const commitText = () => {
+    if (textCommitted.current) return;
+    textCommitted.current = true;
     if (textInput && textInput.value.trim()) {
       const el: WhiteboardElement = {
         id: uid(),

@@ -103,6 +103,30 @@ function sanitiseSnippet(raw: any): CodeSnippet | undefined {
   };
 }
 
+const WHITEBOARD_TYPES = new Set(['pen', 'rectangle', 'circle', 'line', 'arrow', 'text']);
+
+/** Whiteboard input is stored and rebroadcast as-is, so coerce numbers and bound sizes before it is kept. */
+function sanitiseWhiteboardElement(raw: any): WhiteboardElement | null {
+  if (!raw || typeof raw !== 'object') return null;
+  if (typeof raw.id !== 'string' || !raw.id || raw.id.length > 80) return null;
+  if (!WHITEBOARD_TYPES.has(raw.type)) return null;
+  const num = (v: unknown, fallback = 0) => (typeof v === 'number' && Number.isFinite(v) ? v : fallback);
+  return {
+    id: raw.id,
+    type: raw.type,
+    x: num(raw.x),
+    y: num(raw.y),
+    width: num(raw.width),
+    height: num(raw.height),
+    color: String(raw.color || 'ink').slice(0, 40),
+    strokeWidth: Math.min(Math.max(num(raw.strokeWidth, 2), 1), 12),
+    text: raw.text ? String(raw.text).slice(0, 500) : undefined,
+    points: Array.isArray(raw.points) ? raw.points.slice(0, 4000).map((n: unknown) => num(n)) : undefined,
+    createdBy: '',
+    username: '',
+  };
+}
+
 /** Terminal colour markup: [[name]text] where name is a theme token (accent, ok, warn, err, muted). */
 const c = (tone: 'accent' | 'ok' | 'warn' | 'err' | 'muted', text: string | number) => `[[${tone}]${text}]`;
 
@@ -309,13 +333,12 @@ export function initSockets(server: HTTPServer) {
     });
 
     socket.on('whiteboard:draw', (elem: WhiteboardElement) => {
-      if (!elem?.id || !elem.type) return;
+      const clean = sanitiseWhiteboardElement(elem);
+      if (!clean) return;
       const author = me();
-      const existing = db.getWhiteboardElements().find((e) => e.id === elem.id);
+      const existing = db.getWhiteboardElements().find((e) => e.id === clean.id);
       const saved = db.saveWhiteboardElement({
-        ...elem,
-        text: elem.text ? String(elem.text).slice(0, 500) : undefined,
-        points: Array.isArray(elem.points) ? elem.points.slice(0, 4000) : undefined,
+        ...clean,
         createdBy: existing?.createdBy || userId,
         username: existing?.username || author.username,
       });
@@ -385,7 +408,8 @@ export function initSockets(server: HTTPServer) {
           break;
         }
         case 'events': {
-          const upcoming = db.getEvents().filter((e) => Date.parse(e.date) > Date.now() - 3600000);
+          // Same window as the Events page: an event stays upcoming for two hours after it starts.
+          const upcoming = db.getEvents().filter((e) => Date.parse(e.date) > Date.now() - 2 * 3600000);
           respond(
             upcoming.length
               ? upcoming

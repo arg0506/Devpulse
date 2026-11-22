@@ -51,7 +51,7 @@ All variables are optional for local development. See `.env.example`.
 | Variable | Purpose |
 | --- | --- |
 | `PORT` | Port for the combined API + web server (default `3000`) |
-| `JWT_SECRET` | Signs session tokens. **Set this in production.** |
+| `JWT_SECRET` | Signs session tokens. **Required when `NODE_ENV=production`**: the server refuses to start without it. |
 | `GEMINI_API_KEY` | Enables `@gemini` replies, the console `ai` command and Gemini/search steps |
 | `GEMINI_MODEL` | Override the model (default `gemini-3.5-flash`) |
 | `DATABASE_URL` | PostgreSQL connection string. When reachable, users, messages, communities and events are mirrored with Prisma |

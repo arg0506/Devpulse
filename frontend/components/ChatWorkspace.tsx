@@ -480,6 +480,10 @@ export default function ChatWorkspace() {
     socket.on('connect', join);
     return () => {
       socket.off('connect', join);
+      // Typing belongs to the channel being left: clear it so the next channel starts clean.
+      if (typingTimer.current) clearTimeout(typingTimer.current);
+      if (isTyping.current) socket.emit('typing:stop', { channelId: activeChannelId });
+      isTyping.current = false;
     };
   }, [activeChannelId]);
 

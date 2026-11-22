@@ -124,7 +124,8 @@ export function CodeBlock({ code, language, title }: { code: string; language: s
 
 // ---------- Inline markdown ----------
 
-const INLINE_RE = /(\*\*[^*\n]+\*\*|`[^`\n]+`|_[^_\n]+_|https?:\/\/[^\s<]+[^\s<.,;:!?)\]'"]|(?<![\w@])@[a-z0-9_]{2,20})/gi;
+// Italics need word boundaries, so snake_case identifiers such as first_name_value stay plain.
+const INLINE_RE = /(\*\*[^*\n]+\*\*|`[^`\n]+`|(?<![\w])_[^_\n]+_(?![\w])|https?:\/\/[^\s<]+[^\s<.,;:!?)\]'"]|(?<![\w@])@[a-z0-9_]{2,20})/gi;
 
 function renderInline(text: string, keyPrefix: string): React.ReactNode[] {
   const out: React.ReactNode[] = [];

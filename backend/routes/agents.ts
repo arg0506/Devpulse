@@ -1,5 +1,6 @@
 import { Router, Response } from 'express';
 import dns from 'dns';
+import https from 'https';
 import net from 'net';
 import { db } from '../db';
 import { authMiddleware, AuthenticatedRequest } from '../middleware/auth';
@@ -17,6 +18,9 @@ const calls = new Map<string, number[]>();
 
 function rateLimited(userId: string): boolean {
   const now = Date.now();
+  if (calls.size > 5000) {
+    for (const [id, stamps] of calls) if (!stamps.some((t) => now - t < WINDOW_MS)) calls.delete(id);
+  }
   const recent = (calls.get(userId) || []).filter((t) => now - t < WINDOW_MS);
   recent.push(now);
   calls.set(userId, recent);
@@ -93,32 +97,43 @@ router.post('/search', async (req: AuthenticatedRequest, res: Response) => {
   }
 });
 
-function isPrivateAddress(ip: string): boolean {
-  if (net.isIPv4(ip)) {
-    const [a, b] = ip.split('.').map(Number);
-    return (
-      a === 10 ||
-      a === 127 ||
-      a === 0 ||
-      (a === 169 && b === 254) ||
-      (a === 172 && b >= 16 && b <= 31) ||
-      (a === 192 && b === 168) ||
-      (a === 100 && b >= 64 && b <= 127)
-    );
-  }
-  const lower = ip.toLowerCase();
+function isPrivateIPv4(ip: string): boolean {
+  const [a, b] = ip.split('.').map(Number);
   return (
-    lower === '::1' ||
-    lower.startsWith('fc') ||
-    lower.startsWith('fd') ||
-    lower.startsWith('fe80') ||
-    lower.startsWith('::ffff:127.') ||
-    lower.startsWith('::ffff:10.') ||
-    lower.startsWith('::ffff:192.168.')
+    a === 0 ||
+    a === 10 ||
+    a === 127 ||
+    (a === 100 && b >= 64 && b <= 127) ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 0) ||
+    (a === 192 && b === 168) ||
+    (a === 198 && (b === 18 || b === 19)) ||
+    a >= 224
   );
 }
 
-async function assertPublicHttpsUrl(raw: string): Promise<URL> {
+/** True for any address a webhook must never reach: loopback, private, link-local, multicast, unspecified. */
+export function isPrivateAddress(raw: string): boolean {
+  const ip = raw.toLowerCase().replace(/^\[|\]$/g, '');
+  if (net.isIPv4(ip)) return isPrivateIPv4(ip);
+  if (net.isIPv6(ip)) {
+    // IPv4-mapped addresses (::ffff:a.b.c.d or the hex form ::ffff:xxxx:xxxx) are judged by their IPv4 part.
+    const dotted = ip.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+    if (dotted) return isPrivateIPv4(dotted[1]);
+    const hex = ip.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+    if (hex) {
+      const hi = parseInt(hex[1], 16);
+      const lo = parseInt(hex[2], 16);
+      return isPrivateIPv4(`${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`);
+    }
+    return ip === '::' || ip === '::1' || /^f[cd]/.test(ip) || /^fe[89ab]/.test(ip) || /^ff/.test(ip);
+  }
+  return true; // not a recognisable IP address: refuse
+}
+
+/** Checks the URL up front, before any network work. */
+function parsePublicHttpsUrl(raw: string): URL {
   let url: URL;
   try {
     url = new URL(raw);
@@ -126,9 +141,44 @@ async function assertPublicHttpsUrl(raw: string): Promise<URL> {
     throw new Error('Enter a full webhook URL, starting with https://.');
   }
   if (url.protocol !== 'https:') throw new Error('Webhook URLs must use https://.');
-  const { address } = await dns.promises.lookup(url.hostname);
-  if (isPrivateAddress(address)) throw new Error('Webhooks cannot target private or local network addresses.');
+  const host = url.hostname.replace(/^\[|\]$/g, '');
+  if (net.isIP(host) && isPrivateAddress(host)) throw new Error('Webhooks cannot target private or local network addresses.');
   return url;
+}
+
+/**
+ * DNS lookup used for the actual connection. Checking here, at connect time, means a host that
+ * resolves to a private address (or changes its answer between two lookups) is refused too.
+ */
+function publicOnlyLookup(hostname: string, options: any, callback: (err: Error | null, address?: any, family?: number) => void) {
+  dns.lookup(hostname, { family: options?.family ?? 0 }, (err, address, family) => {
+    if (err) return callback(err);
+    if (isPrivateAddress(address)) return callback(new Error('Webhooks cannot target private or local network addresses.'));
+    if (options?.all) return callback(null, [{ address, family }]);
+    return callback(null, address, family);
+  });
+}
+
+/** POSTs JSON over https. Redirects are not followed, so a public host cannot bounce the request inside the network. */
+function postWebhook(url: URL, body: string): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const req = https.request(
+      url,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+        lookup: publicOnlyLookup as any,
+        timeout: 8000,
+      },
+      (response) => {
+        response.resume();
+        resolve(response.statusCode ?? 0);
+      },
+    );
+    req.on('timeout', () => req.destroy(new Error('The webhook did not answer in time.')));
+    req.on('error', reject);
+    req.end(body);
+  });
 }
 
 router.post('/dispatch', async (req: AuthenticatedRequest, res: Response) => {
@@ -139,15 +189,13 @@ router.post('/dispatch', async (req: AuthenticatedRequest, res: Response) => {
 
   if (dispatchType === 'webhook') {
     try {
-      const url = await assertPublicHttpsUrl(String(webhookUrl || ''));
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const url = parsePublicHttpsUrl(String(webhookUrl || ''));
+      const status = await postWebhook(
+        url,
         // `text` is read by Slack, `content` by Discord; generic receivers get both plus metadata.
-        body: JSON.stringify({ text: payload, content: payload.slice(0, 2000), source: 'devpulse', workflow: workflowName || null }),
-        signal: AbortSignal.timeout(8000),
-      });
-      return res.json({ ok: response.ok, status: response.status, detail: `Webhook answered HTTP ${response.status}.` });
+        JSON.stringify({ text: payload, content: payload.slice(0, 2000), source: 'devpulse', workflow: workflowName || null }),
+      );
+      return res.json({ ok: status >= 200 && status < 300, status, detail: `Webhook answered HTTP ${status}.` });
     } catch (err: any) {
       return res.status(400).json({ error: err.message || 'The webhook request failed.' });
     }

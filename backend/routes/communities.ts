@@ -1,5 +1,5 @@
 import { Router, Response } from 'express';
-import { db } from '../db';
+import { db, slugify } from '../db';
 import prisma, { isPrismaEnabled } from '../prismaClient';
 import { authMiddleware, AuthenticatedRequest } from '../middleware/auth';
 import { getIO } from '../realtime';
@@ -20,6 +20,11 @@ router.post('/', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
   const name = String(req.body?.name || '').trim();
   const description = String(req.body?.description || '').trim();
   if (name.length < 3) return res.status(400).json({ error: 'Community names need at least 3 characters.' });
+  const slug = slugify(name);
+  if (!slug) return res.status(400).json({ error: 'Community names need at least one letter or number.' });
+  if (db.getCommunities().some((c) => c.id === `comm-${slug}`)) {
+    return res.status(409).json({ error: 'A community with that name already exists.' });
+  }
 
   const userId = req.user!.userId;
   const community = db.createCommunity(name.slice(0, 40), description.slice(0, 200), userId);

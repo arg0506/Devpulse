@@ -62,6 +62,8 @@ export default function EventsView() {
     try {
       const updated = await api<DevEvent>(`/api/events/${selected.id}/rsvp`, { method: 'POST' });
       setEvents((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
+    } catch {
+      /* the RSVP did not change; the list keeps its previous state */
     } finally {
       setRsvpBusy(false);
     }
