@@ -55,7 +55,7 @@ export interface DevMessage {
   editedAt?: string;
 }
 
-export type ChannelCategory = 'Channels' | 'Guilds' | 'Direct Messages' | 'Events';
+export type ChannelCategory = 'Channels' | 'Guilds' | 'Direct Messages' | 'Groups' | 'Events';
 
 export interface DevChannel {
   id: string;
@@ -63,8 +63,16 @@ export interface DevChannel {
   description: string;
   category: ChannelCategory;
   isPrivate?: boolean;
-  /** Participants, only set for direct messages. */
+  /** Participants, only set for direct messages and groups. */
   members?: string[];
+  /** Group admins. Only admins can change the group or add and remove people. */
+  admins?: string[];
+  /** When on, only admins can post in the group. */
+  adminOnly?: boolean;
+  /** Invite code for joining the group with a link. */
+  inviteCode?: string;
+  /** Emoji shown as the group's picture. */
+  icon?: string;
   /** For community channels: when set, only these roles (and the owner) can see the channel. */
   roleIds?: string[];
   /** Voice channels hold live audio and video instead of messages. */

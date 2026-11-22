@@ -339,6 +339,10 @@ export function initSockets(server: HTTPServer) {
         socket.emit('mod:notice', { text: 'You need to join this community, and have permission to post, to speak here.' });
         return;
       }
+      if (channelRecord.category === 'Groups' && channelRecord.adminOnly && !db.isGroupAdmin(channelId, userId)) {
+        socket.emit('mod:notice', { text: 'Only group admins can send messages in this group.' });
+        return;
+      }
 
       const author = me();
       const command = text ? runSlashCommand(text, author.username) : null;
@@ -534,6 +538,74 @@ export function initSockets(server: HTTPServer) {
       if (typeof to !== 'string' || !data || typeof data !== 'object') return;
       if (!voiceRooms.sameRoom(socket.id, to)) return;
       io.to(to).emit('voice:signal', { from: socket.id, data });
+    });
+
+    // ---------- Groups ----------
+
+    function announceGroup(channelId: string, userIds: string[]) {
+      const channel = db.getChannel(channelId);
+      if (!channel) return;
+      for (const id of new Set(userIds)) io.to(`user:${id}`).emit('channel:new', channel);
+    }
+
+    socket.on('group:create', ({ name, memberIds }: { name: string; memberIds: string[] }, ack?: (r: any) => void) => {
+      const cleanName = String(name || '').trim().slice(0, 40);
+      if (cleanName.length < 1) return ack?.({ error: 'Give the group a name.' });
+      const ids = Array.isArray(memberIds) ? memberIds.map(String).filter((id) => id !== userId) : [];
+      const group = db.createGroup(cleanName, userId, ids);
+      announceGroup(group.id, group.members || []);
+      ack?.({ channel: group });
+    });
+
+    socket.on('group:update', ({ channelId, name, description, adminOnly, icon }: any, ack?: (r: any) => void) => {
+      if (!db.isGroupAdmin(String(channelId), userId)) return ack?.({ error: 'Only group admins can change the group.' });
+      const patch: Record<string, unknown> = {};
+      if (typeof name === 'string' && name.trim()) patch.name = name.trim().slice(0, 40);
+      if (typeof description === 'string') patch.description = description.slice(0, 200);
+      if (typeof adminOnly === 'boolean') patch.adminOnly = adminOnly;
+      if (typeof icon === 'string' && icon.length <= 8) patch.icon = icon;
+      const group = db.updateGroup(String(channelId), patch);
+      if (!group) return ack?.({ error: 'That group no longer exists.' });
+      announceGroup(group.id, group.members || []);
+      ack?.({ channel: group });
+    });
+
+    socket.on('group:members', ({ channelId, add, remove }: any, ack?: (r: any) => void) => {
+      const id = String(channelId);
+      if (!db.isGroupAdmin(id, userId)) return ack?.({ error: 'Only group admins can change the members.' });
+      const added = Array.isArray(add) ? db.addGroupMembers(id, add.map(String)) : [];
+      if (Array.isArray(remove)) {
+        for (const target of remove.map(String)) {
+          if (target === userId) continue;
+          db.removeGroupMember(id, target);
+          io.to(`user:${target}`).emit('channel:removed', { channelId: id });
+        }
+      }
+      const group = db.getChannel(id);
+      announceGroup(id, [...(group?.members || []), ...added]);
+      ack?.({ channel: group, added });
+    });
+
+    socket.on('group:leave', ({ channelId }: { channelId: string }, ack?: (r: any) => void) => {
+      const id = String(channelId);
+      if (!db.canAccessChannel(id, userId)) return ack?.({ error: 'You are not in this group.' });
+      db.removeGroupMember(id, userId);
+      socket.emit('channel:removed', { channelId: id });
+      announceGroup(id, db.getChannel(id)?.members || []);
+      ack?.({ ok: true });
+    });
+
+    socket.on('group:regenerate-invite', ({ channelId }: { channelId: string }, ack?: (r: any) => void) => {
+      if (!db.isGroupAdmin(String(channelId), userId)) return ack?.({ error: 'Only group admins can reset the invite link.' });
+      ack?.({ code: db.regenerateGroupInvite(String(channelId)) });
+    });
+
+    socket.on('group:join', ({ code }: { code: string }, ack?: (r: any) => void) => {
+      const group = db.findGroupByInvite(String(code || '').trim().toLowerCase());
+      if (!group) return ack?.({ error: 'That invite link is no longer valid.' });
+      db.addGroupMembers(group.id, [userId]);
+      announceGroup(group.id, group.members || []);
+      ack?.({ channel: db.getChannel(group.id) });
     });
 
     socket.on('message:edit', ({ messageId, text }: { messageId: string; text: string }) => {

@@ -594,7 +594,7 @@ class Database {
   getChannelsForUser(userId: string): DevChannel[] {
     return this.data.channels.filter(
       (c) =>
-        (c.category !== 'Direct Messages' || (c.members || []).includes(userId)) &&
+        (!['Direct Messages', 'Groups'].includes(c.category) || (c.members || []).includes(userId)) &&
         (!c.communityId || !c.roleIds?.length || this.canSeePrivateChannel(c, userId)),
     );
   }
@@ -608,6 +608,7 @@ class Database {
       return channelId.split(':').slice(1).includes(userId);
     }
     const channel = this.getChannel(channelId);
+    if (channel?.category === 'Groups') return (channel.members || []).includes(userId);
     if (channel?.communityId && channel.roleIds?.length) return this.canSeePrivateChannel(channel, userId);
     return true;
   }
@@ -645,6 +646,70 @@ class Database {
     this.data.channels.push(created);
     this.save();
     return created;
+  }
+
+  // ---------- Groups (WhatsApp-style group chats) ----------
+
+  /** Creates a group with its creator as the first admin. Unknown people are ignored. */
+  createGroup(name: string, creatorId: string, memberIds: string[]): DevChannel {
+    const members = [...new Set([creatorId, ...memberIds])].filter((id) => !!this.data.users[id] && !BOT_IDS.has(id));
+    const id = `group-${randomBytes(6).toString('hex')}`;
+    return this.createChannel({
+      id,
+      name,
+      description: '',
+      category: 'Groups',
+      members,
+      admins: [creatorId],
+      adminOnly: false,
+      inviteCode: newInviteCode(),
+      icon: '👥',
+      isPrivate: true,
+    });
+  }
+
+  updateGroup(id: string, patch: Partial<Pick<DevChannel, 'name' | 'description' | 'adminOnly' | 'icon'>>): DevChannel | undefined {
+    const group = this.getChannel(id);
+    if (!group || group.category !== 'Groups') return undefined;
+    Object.assign(group, patch);
+    this.save();
+    return group;
+  }
+
+  addGroupMembers(id: string, userIds: string[]): string[] {
+    const group = this.getChannel(id);
+    if (!group || group.category !== 'Groups') return [];
+    const added = [...new Set(userIds)].filter((u) => !!this.data.users[u] && !BOT_IDS.has(u) && !(group.members || []).includes(u));
+    group.members = [...(group.members || []), ...added];
+    this.save();
+    return added;
+  }
+
+  /** Removes someone from a group. The last admin is replaced by the longest-standing member. */
+  removeGroupMember(id: string, userId: string) {
+    const group = this.getChannel(id);
+    if (!group || group.category !== 'Groups') return;
+    group.members = (group.members || []).filter((m) => m !== userId);
+    group.admins = (group.admins || []).filter((a) => a !== userId);
+    if (group.members.length > 0 && group.admins.length === 0) group.admins = [group.members[0]];
+    this.save();
+  }
+
+  regenerateGroupInvite(id: string): string | undefined {
+    const group = this.getChannel(id);
+    if (!group || group.category !== 'Groups') return undefined;
+    group.inviteCode = newInviteCode();
+    this.save();
+    return group.inviteCode;
+  }
+
+  findGroupByInvite(code: string): DevChannel | undefined {
+    return this.data.channels.find((c) => c.category === 'Groups' && c.inviteCode === code);
+  }
+
+  isGroupAdmin(id: string, userId: string): boolean {
+    const group = this.getChannel(id);
+    return group?.category === 'Groups' && (group.admins || []).includes(userId);
   }
 
   openDirectMessage(a: string, b: string): DevChannel {
