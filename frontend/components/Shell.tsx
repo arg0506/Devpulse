@@ -11,7 +11,8 @@ import AgentWorkflowBuilder from './AgentWorkflowBuilder';
 import Terminal from './Terminal';
 import CheckoutModal from './CheckoutModal';
 import CommandPalette from './CommandPalette';
-import { SettingsModal, UserCardModal } from './ProfileModals';
+import { UserCardModal } from './ProfileModals';
+import { SettingsModal } from './ProfileSheet';
 
 // Each section has its own colour; the active one fills with it.
 const NAV: { view: View; label: string; icon: typeof MessagesSquare; color: string }[] = [
