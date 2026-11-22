@@ -168,6 +168,56 @@ function Reactions({ msg, onToggle }: { msg: DevMessage; onToggle: (emoji: strin
   );
 }
 
+interface Preview {
+  url: string;
+  title?: string;
+  description?: string;
+  siteName?: string;
+  image?: string;
+}
+
+// Previews are shared across rows, so each link is requested once per session.
+const previewCache = new Map<string, Promise<Preview | null>>();
+
+function firstLink(text: string): string | undefined {
+  return /https?:\/\/[^\s<>"'`)]+/.exec(text)?.[0];
+}
+
+/** A small card for the first web link in a message. Quietly shows nothing when no preview exists. */
+function LinkPreviewCard({ url }: { url: string }) {
+  const [preview, setPreview] = useState<Preview | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    let pending = previewCache.get(url);
+    if (!pending) {
+      pending = api<Preview>('/api/links/preview', { body: { url } }).catch(() => null);
+      previewCache.set(url, pending);
+    }
+    pending.then((p) => alive && setPreview(p));
+    return () => {
+      alive = false;
+    };
+  }, [url]);
+
+  if (!preview || !(preview.title || preview.description)) return null;
+  return (
+    <a
+      href={preview.url}
+      target="_blank"
+      rel="noreferrer noopener"
+      className="mt-2 flex max-w-md overflow-hidden rounded-xl border border-line bg-subtle transition-colors hover:border-line-strong"
+    >
+      {preview.image && <img src={preview.image} alt="" loading="lazy" referrerPolicy="no-referrer" className="h-20 w-24 flex-shrink-0 object-cover" />}
+      <span className="min-w-0 flex-1 p-3">
+        {preview.siteName && <span className="block font-mono text-[10.5px] text-ink-3">{preview.siteName}</span>}
+        {preview.title && <span className="block truncate text-[13px] font-semibold">{preview.title}</span>}
+        {preview.description && <span className="line-clamp-2 block text-[12px] text-ink-2">{preview.description}</span>}
+      </span>
+    </a>
+  );
+}
+
 function MessageRow({
   msg,
   compact,
@@ -260,6 +310,7 @@ function MessageRow({
           msg.text && (
             <>
               <Markdown text={msg.text} />
+              {firstLink(msg.text) && <LinkPreviewCard url={firstLink(msg.text)!} />}
               {msg.editedAt && <span className="ml-1 text-[11px] text-ink-3">(edited)</span>}
             </>
           )

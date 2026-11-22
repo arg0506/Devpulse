@@ -14,6 +14,7 @@ import { checkPrismaConnection, isPrismaEnabled } from './backend/prismaClient';
 import { authMiddleware, AuthenticatedRequest } from './backend/middleware/auth';
 import { rateLimit } from './backend/middleware/rateLimit';
 import { uploadsMiddleware } from './backend/uploads';
+import { cachedLinkPreview } from './backend/linkPreview';
 import { buildPresenceList } from './backend/realtime';
 import { isGeminiReady } from './backend/gemini';
 
@@ -46,6 +47,16 @@ async function startServer() {
   app.use('/api/events', eventsRouter);
   app.use('/api/payments', paymentsRouter);
   app.use('/api/agents', agentsRouter);
+
+  // Link previews fetch outside pages, so they are limited per address and only for signed-in people.
+  const previewLimiter = rateLimit({ windowMs: 60 * 1000, max: 30 }, 'Too many link previews. Slow down a little.');
+  app.post('/api/links/preview', authMiddleware, previewLimiter, async (req: AuthenticatedRequest, res) => {
+    try {
+      res.json(await cachedLinkPreview(String(req.body?.url || '')));
+    } catch (err: any) {
+      res.status(400).json({ error: err.message || 'No preview is available for that link.' });
+    }
+  });
 
   app.get('/api/health', (_req, res) => {
     res.json({
