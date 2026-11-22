@@ -219,7 +219,7 @@ function UserPanel() {
 
 /** Members who are online and offline, listed on the right of the chat, as in Discord. */
 function MemberColumn() {
-  const { presences, user } = useWorkspace();
+  const { presences, user, showProfile } = useWorkspace();
   const people = presences.filter((p) => !['system-bot', 'gemini-bot'].includes(p.userId));
   const online = people.filter((p) => p.status !== 'offline');
   const offline = people.filter((p) => p.status === 'offline');
@@ -231,9 +231,11 @@ function MemberColumn() {
         </p>
         <ul>
           {list.map((p) => (
-            <li key={p.userId} className="flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-[#35373c]">
-              <Avatar emoji={p.avatarEmoji} size={32} status={p.status} />
-              <span className={cx('min-w-0 flex-1 truncate text-[14px]', p.userId === user.id ? 'text-ink' : 'text-ink-2')}>{p.username}</span>
+            <li key={p.userId}>
+              <button type="button" onClick={() => showProfile(p.userId)} className="flex w-full items-center gap-3 rounded-md px-2 py-1.5 text-left hover:bg-[#35373c]">
+                <Avatar emoji={p.avatarEmoji} size={32} status={p.status} />
+                <span className={cx('min-w-0 flex-1 truncate text-[14px]', p.userId === user.id ? 'text-ink' : 'text-ink-2')}>{p.username}</span>
+              </button>
             </li>
           ))}
         </ul>
