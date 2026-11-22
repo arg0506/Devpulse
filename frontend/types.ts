@@ -46,8 +46,8 @@ export interface DevMessage {
   isBot?: boolean;
   /** The message this one replies to, with a short preview of its text. */
   replyTo?: { id: string; username: string; text: string };
-  /** An inline image, sent as a data URL. */
-  attachment?: { name: string; type: string; dataUrl: string };
+  /** A stored file. Images render inline; other files download. */
+  attachment?: { name: string; type: string; url: string };
   /** Usernames mentioned with @name in the text. */
   mentions?: string[];
   editedAt?: string;

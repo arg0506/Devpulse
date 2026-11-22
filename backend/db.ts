@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { randomBytes } from 'crypto';
+import { saveUpload } from './uploads';
 import {
   DevUser,
   DevMessage,
@@ -321,6 +322,14 @@ class Database {
       delete user.password;
       delete user.email;
       if (user.tier === 'Sovereign') user.tier = 'Free';
+    }
+    // Attachments used to live inside the data file as base64. Move them to the uploads folder.
+    for (const message of this.data.messages as any[]) {
+      const inline = message.attachment?.dataUrl;
+      if (!inline) continue;
+      const stored = saveUpload(inline, message.attachment.name, message.attachment.type);
+      if (stored) message.attachment = stored;
+      else delete message.attachment;
     }
     // Older seed events used free-text dates such as "Tomorrow, 9:00 AM".
     this.data.events.forEach((evt, i) => {

@@ -6,6 +6,7 @@ import { generateText, isGeminiReady, GEMINI_MODEL } from './gemini';
 import { setIO, connectionCounts, broadcastPresence } from './realtime';
 import { DevMessage, DevUser, ThreadReply, WhiteboardElement, CodeSnippet } from '../frontend/types';
 import { hasPermission } from '../frontend/lib/permissions';
+import { saveUpload, deleteUpload } from './uploads';
 import prisma, { isPrismaEnabled } from './prismaClient';
 
 const MAX_MESSAGE_LENGTH = 8000;
@@ -101,7 +102,7 @@ function messageFrom(user: DevUser, channelId: string, text: string, codeSnippet
  */
 const MAX_ATTACHMENT_CHARS = 700_000;
 const BLOCKED_ATTACHMENT_TYPES = /^(text\/html|application\/xhtml|image\/svg\+xml|application\/xml|text\/xml)$/i;
-function sanitiseAttachment(raw: any): DevMessage['attachment'] | undefined {
+function sanitiseAttachment(raw: any): { name: string; type: string; dataUrl: string } | undefined {
   if (!raw || typeof raw.dataUrl !== 'string') return undefined;
   const match = /^data:([a-z0-9.+-]+\/[a-z0-9.+-]+);base64,/i.exec(raw.dataUrl);
   if (!match || raw.dataUrl.length > MAX_ATTACHMENT_CHARS || BLOCKED_ATTACHMENT_TYPES.test(match[1])) return undefined;
@@ -336,7 +337,8 @@ export function initSockets(server: HTTPServer) {
       }
       const finalText = command && 'text' in command ? command.text : text;
       const msg = messageFrom(author, channelId, finalText, snippet);
-      if (attachment) msg.attachment = attachment;
+      const stored = attachment ? saveUpload(attachment.dataUrl, attachment.name, attachment.type) : undefined;
+      if (stored) msg.attachment = stored;
       const replied = input?.replyToId ? db.getMessage(String(input.replyToId)) : undefined;
       if (replied && replied.channelId === channelId) {
         msg.replyTo = { id: replied.id, username: replied.username, text: replied.text.slice(0, 120) };
@@ -472,6 +474,7 @@ export function initSockets(server: HTTPServer) {
       const canModerate = db.isAdmin(userId) || hasPermission(community, userId, 'manage_messages');
       if (!canModerate) return;
       db.deleteMessage(messageId);
+      deleteUpload(msg.attachment?.url);
       db.audit({ actor: me().username, action: 'delete message', target: msg.username, detail: msg.text.slice(0, 80) });
       io.to(`channel:${msg.channelId}`).emit('message:deleted', { messageId, channelId: msg.channelId });
       pushSocial([userId]);
@@ -491,6 +494,7 @@ export function initSockets(server: HTTPServer) {
       const msg = db.getMessage(messageId);
       if (!msg || msg.userId !== userId) return;
       db.deleteMessage(messageId);
+      deleteUpload(msg.attachment?.url);
       io.to(`channel:${msg.channelId}`).emit('message:deleted', { messageId, channelId: msg.channelId });
     });
 

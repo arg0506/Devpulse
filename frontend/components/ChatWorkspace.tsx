@@ -266,10 +266,10 @@ function MessageRow({
         )}
         {msg.attachment &&
           (msg.attachment.type.startsWith('image/') ? (
-            <img src={msg.attachment.dataUrl} alt={msg.attachment.name} className="mt-2 max-h-72 rounded-xl border border-line object-contain" />
+            <img src={msg.attachment.url} alt={msg.attachment.name} className="mt-2 max-h-72 rounded-xl border border-line object-contain" />
           ) : (
             <a
-              href={msg.attachment.dataUrl}
+              href={msg.attachment.url}
               download={msg.attachment.name}
               className="mt-2 inline-flex items-center gap-2 rounded-xl border border-line bg-subtle px-3 py-2 text-[13px] font-medium hover:border-line-strong"
             >
