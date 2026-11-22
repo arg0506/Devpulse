@@ -812,6 +812,26 @@ class Database {
     this.save();
   }
 
+  banFromCommunity(communityId: string, userId: string, reason: string) {
+    const comm = this.findCommunity(communityId);
+    if (!comm) return;
+    comm.members = comm.members.filter((id) => id !== userId);
+    if (comm.memberRoles) delete comm.memberRoles[userId];
+    comm.bans = { ...(comm.bans || {}), [userId]: reason };
+    this.save();
+  }
+
+  unbanFromCommunity(communityId: string, userId: string) {
+    const comm = this.findCommunity(communityId);
+    if (!comm?.bans) return;
+    delete comm.bans[userId];
+    this.save();
+  }
+
+  isBannedFromCommunity(communityId: string, userId: string): boolean {
+    return !!this.findCommunity(communityId)?.bans?.[userId];
+  }
+
   kickMember(communityId: string, userId: string) {
     const comm = this.findCommunity(communityId);
     if (!comm) return;

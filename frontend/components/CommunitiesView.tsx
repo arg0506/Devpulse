@@ -441,6 +441,18 @@ export default function CommunitiesView() {
                                       {isSelf && <span className="ml-1.5 font-mono text-[11px] text-ink-3">you</span>}
                                     </p>
                                   </div>
+                                  {can('ban_members') && !isSelf && !isOwner && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const reason = window.prompt(`Ban ${name}? Give a reason (optional):`, '');
+                                        if (reason !== null) run(() => api(`/api/communities/${selected.id}/bans`, { body: { userId: m.id, reason } }));
+                                      }}
+                                      className="rounded-md px-2 py-0.5 font-mono text-[11px] text-ink-3 hover:text-err"
+                                    >
+                                      ban
+                                    </button>
+                                  )}
                                   {can('kick_members') && !isSelf && !isOwner && (
                                     <button
                                       type="button"
@@ -485,6 +497,29 @@ export default function CommunitiesView() {
                     ))}
                 </div>
               </section>
+
+              {can('ban_members') && Object.keys(selected.bans ?? {}).length > 0 && (
+                <section>
+                  <p className="mb-2 font-mono text-[11px] tracking-[0.14em] text-ink-3 uppercase">Banned</p>
+                  <ul className="space-y-1">
+                    {Object.entries(selected.bans ?? {}).map(([id, reason]) => (
+                      <li key={id} className="flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-subtle">
+                        <span className="min-w-0 flex-1 truncate text-[13px]">
+                          {presenceOf(id)?.username ?? id}
+                          <span className="ml-2 text-[12px] text-ink-3">{reason}</span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => run(() => api(`/api/communities/${selected.id}/bans/${id}`, { method: 'DELETE' }))}
+                          className="rounded-md border border-line px-2.5 py-1 text-[12px] hover:bg-subtle"
+                        >
+                          Unban
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
 
               <p className="flex items-center gap-1.5 text-[12px] text-ink-3">
                 <Link2 size={12} /> Your permissions here:{' '}

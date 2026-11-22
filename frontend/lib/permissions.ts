@@ -8,6 +8,7 @@ export const ALL_PERMISSIONS: Permission[] = [
   'manage_messages',
   'manage_invites',
   'kick_members',
+  'ban_members',
   'send_messages',
 ];
 
@@ -18,6 +19,7 @@ export const PERMISSION_LABELS: Record<Permission, { label: string; hint: string
   manage_messages: { label: 'Manage messages', hint: 'Delete other members’ messages in this community.' },
   manage_invites: { label: 'Manage invites', hint: 'Create and reset the invite link.' },
   kick_members: { label: 'Kick members', hint: 'Remove members from the community.' },
+  ban_members: { label: 'Ban members', hint: 'Ban members so they cannot rejoin.' },
   send_messages: { label: 'Send messages', hint: 'Post in this community’s channels.' },
 };
 
@@ -28,7 +30,7 @@ export const DEFAULT_ROLES: CommunityRole[] = [
     id: 'admin',
     name: 'Admin',
     color: '#ff8fc7',
-    permissions: ['manage_channels', 'manage_roles', 'manage_messages', 'manage_invites', 'kick_members', 'send_messages'],
+    permissions: ['manage_channels', 'manage_roles', 'manage_messages', 'manage_invites', 'kick_members', 'ban_members', 'send_messages'],
     isDefault: true,
   },
   { id: 'mod', name: 'Moderator', color: '#7cc4ff', permissions: ['manage_messages', 'kick_members', 'send_messages'], isDefault: true },

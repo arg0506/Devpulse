@@ -106,6 +106,9 @@ router.post('/', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
 /** Join, or leave when already a member. */
 router.post('/:id/join', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
   const userId = req.user!.userId;
+  if (db.isBannedFromCommunity(String(req.params.id), userId)) {
+    return res.status(403).json({ error: 'You are banned from this community.' });
+  }
   const community = db.toggleCommunityMembership(String(req.params.id), userId);
   if (!community) return res.status(404).json({ error: 'That community no longer exists.' });
   announce(community);
@@ -121,6 +124,9 @@ router.post('/join-invite', authMiddleware, (req: AuthenticatedRequest, res: Res
   const found = code ? db.findCommunityByInvite(code) : undefined;
   if (!found) return res.status(404).json({ error: 'That invite is no longer valid.' });
   const userId = req.user!.userId;
+  if (db.isBannedFromCommunity(found.id, userId)) {
+    return res.status(403).json({ error: 'You are banned from this community.' });
+  }
   const community = db.joinCommunity(found.id, userId);
   if (!community) return res.status(404).json({ error: 'That community no longer exists.' });
   announce(community);
@@ -213,6 +219,30 @@ router.put('/:id/members/:userId/roles', authMiddleware, (req: AuthenticatedRequ
   db.setMemberRoles(community.id, target, roles.map((r) => r.id));
   announce(db.findCommunity(community.id)!);
   return res.json({ roleIds: roles.map((r) => r.id) });
+});
+
+/** Bans a member. A banned person is removed and cannot rejoin until unbanned. */
+router.post('/:id/bans', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+  const community = requirePermission(req, res, 'ban_members');
+  if (!community) return;
+  const target = String(req.body?.userId || '');
+  if (!target || target === req.user!.userId || community.ownerId === target) {
+    return res.status(400).json({ error: 'That person cannot be banned.' });
+  }
+  if (!db.getUser(target)) return res.status(404).json({ error: 'That account no longer exists.' });
+  const reason = String(req.body?.reason || '').trim().slice(0, 140) || 'No reason given';
+  db.banFromCommunity(community.id, target, reason);
+  announce(db.findCommunity(community.id)!);
+  mirrorMembership(community.id, target, false);
+  return res.status(201).json({ ok: true });
+});
+
+router.delete('/:id/bans/:userId', authMiddleware, (req: AuthenticatedRequest, res: Response) => {
+  const community = requirePermission(req, res, 'ban_members');
+  if (!community) return;
+  db.unbanFromCommunity(community.id, String(req.params.userId));
+  announce(db.findCommunity(community.id)!);
+  return res.json({ ok: true });
 });
 
 router.delete('/:id/members/:userId', authMiddleware, (req: AuthenticatedRequest, res: Response) => {

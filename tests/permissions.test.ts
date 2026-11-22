@@ -98,3 +98,11 @@ test('topRole picks the most senior role a member holds', () => {
   assert.equal(topRole(c, OWNER)?.id, 'owner');
   assert.equal(topRole(c, MOD)?.id, 'mod');
 });
+
+test('only admins and owners hold ban_members by default', () => {
+  const c = community();
+  assert.equal(hasPermission(c, OWNER, 'ban_members'), true);
+  assert.equal(hasPermission(c, ADMIN, 'ban_members'), true);
+  assert.equal(hasPermission(c, MOD, 'ban_members'), false);
+  assert.equal(hasPermission(c, MEMBER, 'ban_members'), false);
+});

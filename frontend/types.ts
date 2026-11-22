@@ -116,6 +116,7 @@ export type Permission =
   | 'manage_messages'
   | 'manage_invites'
   | 'kick_members'
+  | 'ban_members'
   | 'send_messages';
 
 export interface CommunityRole {
@@ -133,6 +134,8 @@ export interface DevCommunity {
   description: string;
   channels: string[];
   members: string[];
+  /** userId -> reason. Banned people cannot join or rejoin. */
+  bans?: Record<string, string>;
   ownerId?: string;
   /** Only sent to members who can manage invites. */
   inviteCode?: string;
